@@ -14,15 +14,18 @@
     "zi:lookup": "tsx --env-file-if-exists=.env scripts/zi-lookup.ts",
     "zi:probe": "tsx --env-file-if-exists=.env scripts/zi-probe.ts",
     "job:daily": "tsx --env-file-if-exists=.env workers/daily.ts",
-    "job:weekly": "tsx --env-file-if-exists=.env workers/weekly.ts"
+    "job:weekly": "tsx --env-file-if-exists=.env workers/weekly.ts",
+    "job:retention": "tsx --env-file-if-exists=.env workers/retention.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
     "jose": "^6.2.12",
     "next": "^15.0.0",
     "postgres": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

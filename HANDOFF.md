@@ -65,8 +65,11 @@ aids: `npm run db:stats`, `npm run rescore`, `npm run db:apply -- --reset-runs`.
 Deployed 2026-09-17: GitHub `sebastapiaa/pw-radar`, Railway cron `radar-daily`
 (manual run verified), Vercel project for the dashboard. Phase 3 first cut is built
 (see `docs/ROADMAP.md` Phase 3 progress); Vercel needs `AUTH_SECRET`, `DASHBOARD_URL`
-and either the Entra vars or `AUTH_PASSWORD` before the wall lets anyone in. Phase 2
-(Sunday worker) is not yet written.
+and either the Entra vars or `AUTH_PASSWORD` before the wall lets anyone in (Seb set
+the password mode on 2026-09-17; app registration in Entra was not attempted). Phase 2
+(Sunday worker, retention, profiles) is written but has never run; it must not run
+before Phase 1 passes, and its first run needs `ANTHROPIC_API_KEY` and
+`PII_ENCRYPTION_KEY` in the Railway service.
 
 Local toolchain verified (2026-09-17): `npm install`, `npm run typecheck` and
 `npm run dev` all work. `src/app/` holds a placeholder root page that only proves Next

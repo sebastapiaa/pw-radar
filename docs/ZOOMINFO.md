@@ -152,6 +152,12 @@ What the live descriptions say about the calls the workers depend on:
   contacts with `score`, `reRankingScore` and `meta` explaining the reference person.
   Contact detail (email, direct dial) is the separate, paid `enrich_contacts` step. The
   docs page claiming free email and phone was wrong; the live tool says otherwise.
+  Live shape (2026-09-17): `{ recommendations: [{ zoominfoContactId, attributes: { rank,
+  score, reRankingScore, recommendedPersonBrief }, meta: { sourceType,
+  referencePersonId, referencePersonBrief } }] }`. The brief is
+  `"Name, Title | management_level: [X] | seniority: X | job_function: [X] |
+  department: [X] | industry: [...] | revenue_range: ... | employee_range: ..."`, which
+  is enough to pick the buying committee before spending anything.
 - `enrich_company_signals` — 1–10 company ids per call, `signalTypes` subset of
   INTENT / NEWS / SCOOP. "Charges data credits for any records returned for companies
   not currently under management. Companies enriched within the prior 12 months do not

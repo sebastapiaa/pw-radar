@@ -121,6 +121,29 @@ API (`claude-haiku-4-5`, company-level data only, span-grounded output — see
 the Admin Portal delta within a few credits, and a second run the same week spends near
 zero (RUM working).
 
+**Written 2026-09-17, NOT RUN** (by Seb's decision: write ahead, run only after Phase 1
+passes). `workers/weekly.ts`, `workers/retention.ts`, `src/lib/enrich.ts`,
+`src/lib/profile.ts`. Design notes from the build:
+
+- Shortlist = best score per company over 7 days, excluding tagged-out, any recorded
+  outcome, and companies enriched in the last 30 days. `SHORTLIST_SIZE` 15,
+  `CONTACTS_PER_COMPANY` 5, `CREDIT_CEILING` 150 (env-overridable). The ceiling is
+  checked *before* each enrich batch using the upper bound (every record new).
+- `get_recommended_contacts` (free) returns a `recommendedPersonBrief` string carrying
+  name, title, management level, department and job function, so the buying committee
+  (security, IT leadership, C-suite) is selected from free data and only those 5 are
+  enriched. Verified live on 2026-09-17.
+- `enrich_contacts` response shape is unverified (paid). `parseEnriched()` accepts the
+  usual envelopes and aborts loudly otherwise, so a surprise costs one call.
+  `directPhoneDoNotCall` / `mobilePhoneDoNotCall` are honoured before storage.
+- `enrich_company_signals` is deliberately not called: the daily job already stores
+  intent and scoop detail from free search.
+- Profiles: `claude-haiku-4-5` via `messages.parse` with a zod output format. The model
+  returns quotes, not offsets; offsets are computed here and any span whose quote,
+  signal id or scope slug does not check out is dropped. Text matching outreach
+  patterns rejects the whole profile. Untested until `ANTHROPIC_API_KEY` exists.
+- Retention job ran once against the live DB: purged 0, as expected with no contacts.
+
 ## Phase 3 — Dashboard
 
 Next.js, per `docs/DESIGN.md` and the accounts/scopes concept in `docs/CONTEXT.md`. In
