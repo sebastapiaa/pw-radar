@@ -92,9 +92,16 @@ run taught, all now in code and docs:
 - `SURFACE_THRESHOLD` raised 45 → 60 (`src/lib/scoring.ts` has the distribution).
 - Geography and size filters hold: 2,424 of 2,424 companies in CA and in band.
 
-Remaining for acceptance: runs 2 and 3 on consecutive days (locally is fine; Railway
-cron is the deploy target and needs the repo in git first), then a balance check that
-still reads 8,878.
+Deployed the same day: repo on GitHub (`sebastapiaa/pw-radar`), Railway cron service
+`radar-daily` (`0 13 * * *` UTC, start command `npm run job:daily`, variables set by
+reference to the Postgres service). A manual "Run now" completed in 79 s with status
+ok, 2,424 companies, 4,420 signals, 0 new findings (all suppressed from the morning
+run, batch deduped by id), 0 credits. Two build lessons: do not set a custom
+`npm ci` build command (collides with Railway's node_modules cache mount), and
+`tsx` must be a runtime dependency.
+
+Remaining for acceptance: the scheduled runs on 2026-09-18 and 2026-09-19, then a
+balance check that still reads 8,878.
 
 ## Phase 2 — Weekly worker
 
