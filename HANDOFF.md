@@ -134,9 +134,14 @@ with empty values.
   in the profile. See `docs/CONTEXT.md` and `docs/DESIGN.md`.
 - Account state via notes and tags on accounts and contacts; tags drive suppression.
 - Export: Salesloft person-import CSV only. No generic CSV, no other formats.
-- Profile descriptions are AI-generated (Anthropic API, `claude-haiku-4-5`), grounded
-  by a span contract against stored signals; company-level data only, never contact
-  PII. See `docs/ARCHITECTURE.md`.
+- Profile descriptions: the model-generated paragraph (Anthropic API, `claude-haiku-4-5`,
+  span-grounded, company-level data only) is built but **optional and off by default**
+  as of 2026-09-17; Seb questioned whether it is needed. The account page shows a
+  deterministic summary from stored signals (`src/lib/summary.ts`) unless a generated
+  profile exists. Decide after a few weeks of use.
+- People (2026-09-17): every ZoomInfo-sourced account can pull its recommended people
+  for free (names, titles, buying-committee tier); email and phone are a per-person
+  paid click or the Sunday batch. Credits stay behind a click or the Sunday job.
 - Two services documents are in, distilled into `docs/SERVICES.md`, with the `scopes`
   seed at `db/seed_scopes.sql` and a vendor list feeding a technographic fit signal.
   Only the proof points listed in SERVICES.md may appear in generated profiles.

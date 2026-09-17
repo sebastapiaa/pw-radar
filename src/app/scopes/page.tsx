@@ -7,20 +7,29 @@ export const dynamic = "force-dynamic";
 export default async function ScopesPage() {
   const scopes = await scopesList();
   return (
-    <Shell eyebrow="NO.004 / scopes">
+    <Shell>
       <main className="narrow">
-        <h1>Scopes</h1>
-        <p className="muted">
-          Each service line bundled with the ZoomInfo intent topics that point to it. Highlights in account profiles
-          resolve to one of these.
-        </p>
+        <header className="page-head">
+          <p className="eyebrow">NO.004 / scopes</p>
+          <h1>What we sell, and what it looks like when they want it.</h1>
+          <p className="lede">
+            Each service line is bundled with the ZoomInfo intent topics that point to it. Signals on an account resolve
+            to one of these.
+          </p>
+        </header>
         <ol className="scopes">
           {scopes.map((s, i) => (
-            <li key={s.slug}>
+            <li key={s.slug} className="panel">
               <p className="eyebrow">NO.{String(i + 1).padStart(3, "0")}</p>
               <h2>{s.name}</h2>
               <p>{s.description}</p>
-              <p className="muted">{s.topics.join(" · ")}</p>
+              <p className="topics">
+                {s.topics.map((t) => (
+                  <span key={t} className="pill">
+                    {t}
+                  </span>
+                ))}
+              </p>
             </li>
           ))}
         </ol>

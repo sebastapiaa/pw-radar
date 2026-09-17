@@ -27,9 +27,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ZoomInfoClient, CreditError } from "../src/lib/zoominfo";
 import { db, closeDb } from "../src/lib/db";
-import { encryptPII } from "../src/lib/crypto";
 import { notifyWeekly } from "../src/lib/notify";
-import { recommendedContacts, selectCommittee, enrichContacts } from "../src/lib/enrich";
+import { selectCommittee, storeRecommendations, storeEnrichment } from "../src/lib/enrich";
 import { generateProfile, type ProfileSignal } from "../src/lib/profile";
 
 /** Tune against real output. Higher means more credits, not more insight. */
@@ -38,8 +37,6 @@ const SHORTLIST_SIZE = Number(process.env.SHORTLIST_SIZE ?? 15);
 const CONTACTS_PER_COMPANY = 5;
 /** Abort the run rather than exceed this. A bug costs one run, not the year. */
 const CREDIT_CEILING = Number(process.env.CREDIT_CEILING ?? 150);
-/** Retention window for enriched contact PII. Confirm with Seb. */
-const PII_RETENTION_DAYS = 180;
 const SUPPRESSING_TAGS = ["client", "do-not-contact"];
 
 async function main() {
@@ -87,8 +84,9 @@ async function main() {
     stats.weekTotal = weekTotal;
 
     for (const company of shortlist) {
-      // 1. Free recommendations, buying committee selected from the brief.
-      const recs = await recommendedContacts(client, company.zi_company_id);
+      // 1. Free recommendations stored for everyone (names, titles, tiers), then
+      //    the buying committee selected from them.
+      const { recs } = await storeRecommendations(client, company.zi_company_id);
       const picked = selectCommittee(recs, CONTACTS_PER_COMPANY);
       stats.contactsPicked += picked.length;
       if (!picked.length) continue;
@@ -99,32 +97,12 @@ async function main() {
           `Credit ceiling ${CREDIT_CEILING} would be exceeded (spent ${stats.creditsSpent}, next batch ${picked.length}). Aborting.`
         );
       }
-      const enriched = await enrichContacts(client, picked.map((p) => p.contactId));
-      stats.creditsSpent += enriched.length;
-      await sql`update runs set credits_spent = ${stats.creditsSpent} where run_id = ${runId}`;
 
-      // 3. Encrypt and upsert. Never plaintext into email_enc/phone_enc.
-      const byId = new Map(picked.map((p) => [p.contactId, p]));
-      for (const c of enriched) {
-        const rec = byId.get(c.contactId);
-        const fullName = `${c.firstName} ${c.lastName}`.trim() || rec?.name || "Unknown";
-        await sql`
-          insert into contacts (zi_contact_id, zi_company_id, full_name, title, seniority,
-                                email_enc, phone_enc, enriched_at, purge_after)
-          values (${c.contactId}, ${company.zi_company_id}, ${fullName},
-                  ${c.title ?? rec?.title ?? null}, ${c.managementLevel ?? rec?.managementLevel ?? null},
-                  ${c.email ? encryptPII(c.email) : null}, ${c.phone ? encryptPII(c.phone) : null},
-                  now(), now() + ${`${PII_RETENTION_DAYS} days`}::interval)
-          on conflict (zi_contact_id) do update
-            set full_name = excluded.full_name,
-                title = coalesce(excluded.title, contacts.title),
-                seniority = coalesce(excluded.seniority, contacts.seniority),
-                email_enc = coalesce(excluded.email_enc, contacts.email_enc),
-                phone_enc = coalesce(excluded.phone_enc, contacts.phone_enc),
-                enriched_at = now(),
-                purge_after = excluded.purge_after`;
-        stats.contactsEnriched++;
-      }
+      // 3. Paid enrichment, encrypted on insert inside storeEnrichment().
+      const r = await storeEnrichment(client, company.zi_company_id, picked.map((p) => p.contactId));
+      stats.creditsSpent += r.records;
+      stats.contactsEnriched += r.records;
+      await sql`update runs set credits_spent = ${stats.creditsSpent} where run_id = ${runId}`;
 
       // 4. Profile, company-level data only.
       if (anthropic) {

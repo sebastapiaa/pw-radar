@@ -27,6 +27,18 @@ timestamp precedes the first authenticated Radar call (≈08:41 EST the same day
 credit is not from this project. Unexplained; watch whether it recurs. Phase 1 passes
 only if this number is still 8,878 after three daily runs.
 
+### Where credits can be spent (2026-09-17)
+
+Exactly three code paths call a paid tool, and each records its spend in `runs`:
+
+| Path | Job name in `runs` | Guard |
+|---|---|---|
+| Sunday worker `workers/weekly.ts` | `weekly` | `CREDIT_CEILING` 150 per run, checked before each batch |
+| Dashboard "Get email & phone" click | `enrich-click` | 1 contact per click, 400/month soft cap in `src/lib/actions.ts` |
+| (none yet) research tools | — | AI action credits, not wired |
+
+The daily worker, "Find people", the findings list and the export never spend.
+
 ## Credit model
 
 | Call | Cost |

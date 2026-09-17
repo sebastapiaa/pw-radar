@@ -117,6 +117,71 @@ export async function seedAccount(formData: FormData) {
 }
 
 /**
+ * FREE. Pull the recommended people for an account into the People list:
+ * names, titles, tiers. Nothing is spent. Only works for ZoomInfo-sourced
+ * accounts; manual ones have no ZoomInfo id.
+ */
+export async function findPeople(formData: FormData) {
+  await requireSession();
+  const companyId = String(formData.get("companyId") ?? "");
+  const back = String(formData.get("back") ?? "/");
+  if (!companyId || companyId.startsWith("manual:")) return;
+  const { storeRecommendations, zoomInfoFromEnv } = await import("./enrich");
+  const client = zoomInfoFromEnv(true);
+  await client.discoverTools();
+  client.assertRoles(["recommendedContacts"]);
+  await storeRecommendations(client, companyId);
+  revalidatePath(back);
+}
+
+/** Monthly credit cap mirrors the ZoomInfo per-user cap; leave headroom for the Sunday job. */
+const CLICK_CREDIT_SOFT_CAP = 400;
+
+/**
+ * PAID. One credit (at most) for one person's email and direct dial. Counted
+ * in `runs` as job 'enrich-click' so the credit totals on the home page and
+ * the Admin Portal reconciliation include it.
+ */
+export async function enrichOne(contactId: string): Promise<{ ok: boolean; message: string }> {
+  const s = await requireSession();
+  const sql = db();
+  const [row] = await sql<{ zi_company_id: string; enriched_at: Date | null }[]>`
+    select zi_company_id, enriched_at from contacts where zi_contact_id = ${contactId}`;
+  if (!row) return { ok: false, message: "Unknown contact." };
+  if (row.zi_company_id.startsWith("manual:")) return { ok: false, message: "Manual accounts cannot be enriched." };
+
+  const [{ n: monthSpend }] = await sql<{ n: number }[]>`
+    select coalesce(sum(credits_spent), 0)::int as n from runs
+    where started_at > date_trunc('month', now())`;
+  if (monthSpend >= CLICK_CREDIT_SOFT_CAP) {
+    return { ok: false, message: `Monthly credit soft cap reached (${monthSpend}). Ask before raising it.` };
+  }
+
+  const [{ run_id: runId }] = await sql<{ run_id: string }[]>`
+    insert into runs (job) values ('enrich-click') returning run_id`;
+  try {
+    const { storeEnrichment, zoomInfoFromEnv } = await import("./enrich");
+    const client = zoomInfoFromEnv(false);
+    await client.discoverTools();
+    client.assertRoles(["enrichContacts"]);
+    const r = await storeEnrichment(client, row.zi_company_id, [contactId]);
+    await sql`
+      update runs set finished_at = now(), status = 'ok', credits_spent = ${r.records},
+        companies_seen = 1, error = ${`actor=${s.actor}`}
+      where run_id = ${runId}`;
+    revalidatePath(`/accounts/${encodeURIComponent(row.zi_company_id)}`);
+    return r.withEmail
+      ? { ok: true, message: "Email and phone stored." }
+      : { ok: true, message: "ZoomInfo returned no verified email for this person." };
+  } catch (err) {
+    await sql`
+      update runs set finished_at = now(), status = 'failed', error = ${(err as Error).message.slice(0, 500)}
+      where run_id = ${runId}`;
+    return { ok: false, message: (err as Error).message.slice(0, 200) };
+  }
+}
+
+/**
  * Reveal one contact's email and phone. Logged in export_log with
  * included_pii = true so the audit trail covers on-screen reveals too.
  */

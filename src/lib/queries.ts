@@ -144,19 +144,27 @@ export interface ContactRow {
   fullName: string;
   title: string | null;
   seniority: string | null;
+  department: string | null;
+  tier: string | null;
+  recRank: number | null;
   emailMasked: string | null;
   hasPhone: boolean;
   tags: string[];
   enrichedAt: string | null;
 }
 
-/** Masked by default. Plaintext only via revealContact() in actions.ts. */
+/**
+ * Masked by default. Plaintext only via revealContact() in actions.ts.
+ * Order: buying-committee tiers first, then recommendation rank.
+ */
 export async function contactsForCompany(companyId: string): Promise<ContactRow[]> {
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
-    select zi_contact_id, full_name, title, seniority, email_enc, phone_enc, tags, enriched_at
+    select zi_contact_id, full_name, title, seniority, department, tier, rec_rank,
+           email_enc, phone_enc, tags, enriched_at
     from contacts where zi_company_id = ${companyId}
-    order by enriched_at desc nulls last, full_name`;
+    order by case tier when 'security' then 0 when 'it' then 1 when 'csuite' then 2 else 3 end,
+             rec_rank nulls last, full_name`;
   const { decryptPII } = await import("./crypto");
   return rows.map((r) => {
     let emailMasked: string | null = null;
@@ -172,6 +180,9 @@ export async function contactsForCompany(companyId: string): Promise<ContactRow[
       fullName: String(r.full_name),
       title: (r.title as string) ?? null,
       seniority: (r.seniority as string) ?? null,
+      department: (r.department as string) ?? null,
+      tier: (r.tier as string) ?? null,
+      recRank: r.rec_rank === null || r.rec_rank === undefined ? null : Number(r.rec_rank),
       emailMasked,
       hasPhone: !!r.phone_enc,
       tags: (r.tags as string[]) ?? [],
@@ -317,6 +328,136 @@ export async function headerStats(): Promise<HeaderStats> {
     lastRunStatus: r?.status ?? null,
     creditsSpentWeek: c?.n ?? 0,
   };
+}
+
+export interface ScoopEvent {
+  signalId: number;
+  companyId: string;
+  companyName: string;
+  employeeCount: number | null;
+  type: string | null;
+  headline: string | null;
+  link: string | null;
+  signalDate: string | null;
+}
+
+/** Fresh business events this week: job posts, exec moves, projects. */
+export async function recentScoops(days = 7, limit = 12): Promise<ScoopEvent[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select s.id, s.zi_company_id, c.name, c.employee_count, s.topic, s.headline, s.signal_date,
+           s.raw->'attributes'->>'link' as link
+    from signals s join companies c using (zi_company_id)
+    where s.signal_kind = 'scoop' and s.signal_date > current_date - ${days}::int
+      and not (c.tags && ${SUPPRESSING_TAGS}::text[])
+    order by s.signal_date desc, s.id desc limit ${limit}`;
+  return rows.map((r) => ({
+    signalId: Number(r.id),
+    companyId: String(r.zi_company_id),
+    companyName: String(r.name),
+    employeeCount: r.employee_count === null ? null : Number(r.employee_count),
+    type: (r.topic as string) ?? null,
+    headline: (r.headline as string) ?? null,
+    link: (r.link as string) ?? null,
+    signalDate: r.signal_date ? new Date(r.signal_date as string).toISOString().slice(0, 10) : null,
+  }));
+}
+
+export interface TopicCount {
+  topic: string;
+  scopeName: string | null;
+  companies: number;
+}
+
+/** Which intent topics fired this week, by distinct company. Core topics only. */
+export async function topicsThisWeek(days = 7): Promise<TopicCount[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select s.topic, count(distinct s.zi_company_id)::int as companies,
+           (select name from scopes where s.topic = any(intent_topics) limit 1) as scope_name
+    from signals s
+    where s.signal_kind = 'intent' and s.signal_date > current_date - ${days}::int
+    group by s.topic order by companies desc`;
+  return rows.map((r) => ({
+    topic: String(r.topic),
+    scopeName: (r.scope_name as string) ?? null,
+    companies: Number(r.companies),
+  }));
+}
+
+export interface WorkingRow {
+  companyId: string;
+  name: string;
+  status: string;
+  notedAt: string;
+  score: number | null;
+}
+
+/** Accounts with a recent outcome: what Seb is actively working. */
+export async function workingAccounts(limit = 8): Promise<WorkingRow[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select distinct on (o.zi_company_id) o.zi_company_id, c.name, o.status, o.noted_at,
+           (select max(score) from findings f where f.zi_company_id = o.zi_company_id) as score
+    from outcomes o join companies c using (zi_company_id)
+    where o.status <> 'dead'
+    order by o.zi_company_id, o.noted_at desc`;
+  return rows
+    .sort((a, b) => new Date(b.noted_at as string).getTime() - new Date(a.noted_at as string).getTime())
+    .slice(0, limit)
+    .map((r) => ({
+      companyId: String(r.zi_company_id),
+      name: String(r.name),
+      status: String(r.status),
+      notedAt: new Date(r.noted_at as string).toISOString().slice(0, 10),
+      score: r.score === null ? null : Number(r.score),
+    }));
+}
+
+export interface RunRow {
+  job: string;
+  status: string;
+  startedAt: string;
+  companiesSeen: number;
+  findingsWritten: number;
+  creditsSpent: number;
+}
+
+export async function recentRuns(limit = 5): Promise<RunRow[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select job, status, started_at, companies_seen, findings_written, credits_spent
+    from runs order by started_at desc limit ${limit}`;
+  return rows.map((r) => ({
+    job: String(r.job),
+    status: String(r.status),
+    startedAt: new Date(r.started_at as string).toISOString(),
+    companiesSeen: Number(r.companies_seen ?? 0),
+    findingsWritten: Number(r.findings_written ?? 0),
+    creditsSpent: Number(r.credits_spent ?? 0),
+  }));
+}
+
+/** Manually seeded accounts, newest first. */
+export async function seededAccounts(limit = 8): Promise<CompanyRow[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select zi_company_id, name, domain, employee_count, industry, city, state, source, tags,
+           first_seen_at, last_seen_at
+    from companies where source = 'manual' order by first_seen_at desc limit ${limit}`;
+  return rows.map((r) => ({
+    companyId: String(r.zi_company_id),
+    name: String(r.name),
+    domain: (r.domain as string) ?? null,
+    employeeCount: r.employee_count === null ? null : Number(r.employee_count),
+    industry: (r.industry as string) ?? null,
+    city: (r.city as string) ?? null,
+    state: (r.state as string) ?? null,
+    source: String(r.source),
+    tags: (r.tags as string[]) ?? [],
+    firstSeenAt: new Date(r.first_seen_at as string).toISOString(),
+    lastSeenAt: new Date(r.last_seen_at as string).toISOString(),
+  }));
 }
 
 export async function scopesList(): Promise<{ slug: string; name: string; description: string | null; topics: string[] }[]> {

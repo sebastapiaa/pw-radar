@@ -10,15 +10,18 @@ export const dynamic = "force-dynamic";
 export default async function NewAccountPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
   return (
-    <Shell eyebrow="NO.003 / add account">
+    <Shell>
       <main className="narrow">
-        <h1>Add an account</h1>
-        <p className="muted">
-          For leads that exist outside the scan: event invitees, partner intros, referrals. They join the same profile,
-          notes and analytics. Geography does not apply here.
-        </p>
+        <header className="page-head">
+          <p className="eyebrow">NO.003 / add account</p>
+          <h1>Add an account.</h1>
+          <p className="lede">
+            For leads that exist outside the scan: event invitees, partner intros, referrals. They get the same profile,
+            notes and analytics. Geography does not apply here.
+          </p>
+        </header>
         {error && <p className="error">{error}</p>}
-        <form action={seedAccount} className="stack">
+        <form action={seedAccount} className="stack panel">
           <label>
             Company name
             <input type="text" name="name" required maxLength={200} autoFocus />

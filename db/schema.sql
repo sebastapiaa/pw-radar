@@ -84,15 +84,22 @@ create table contacts (
   seniority       text,
   email_enc       bytea,
   phone_enc       bytea,
-  enriched_at     timestamptz,
+  enriched_at     timestamptz,   -- null until email/phone were paid for
   purge_after     timestamptz,   -- retention job reads this
   tags            text[] not null default '{}',
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  -- from the free recommendation call (db/migrations/002)
+  tier            text,          -- 'security' | 'it' | 'csuite' | 'other'
+  department      text,
+  rec_rank        integer,
+  rec_score       numeric,
+  recommended_at  timestamptz
 );
 
 create index on contacts using gin (tags);
 
 create index on contacts (zi_company_id);
+create index on contacts (zi_company_id, enriched_at);
 create index on contacts (purge_after) where purge_after is not null;
 
 -- Suppression. A company surfaced today should not reappear tomorrow

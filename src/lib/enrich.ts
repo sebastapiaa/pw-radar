@@ -206,3 +206,94 @@ function str(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
   return String(v);
 }
+
+// ---------- storage, shared by the Sunday job and the dashboard actions ----------
+
+import { db } from "./db";
+import { encryptPII } from "./crypto";
+
+/** Retention window for enriched contact PII. Confirm with Seb. */
+export const PII_RETENTION_DAYS = 180;
+
+/**
+ * FREE. Fetch recommendations for a company and store everyone as a contact
+ * row with name, title, tier and rank but no email/phone. Returns how many
+ * rows were written. Safe to call from a click; spends nothing.
+ */
+export async function storeRecommendations(
+  client: ZoomInfoClient,
+  companyId: string,
+  limit = 25
+): Promise<{ stored: number; recs: Recommendation[] }> {
+  const recs = await recommendedContacts(client, companyId, limit);
+  const sql = db();
+  let n = 0;
+  for (const r of recs) {
+    if (!r.name) continue;
+    await sql`
+      insert into contacts (zi_contact_id, zi_company_id, full_name, title, seniority, department,
+                            tier, rec_rank, rec_score, recommended_at)
+      values (${r.contactId}, ${companyId}, ${r.name}, ${r.title || null}, ${r.managementLevel || null},
+              ${r.department || null}, ${r.tier}, ${r.rank}, ${r.reRankingScore >= 0 ? r.reRankingScore : r.score},
+              now())
+      on conflict (zi_contact_id) do update
+        set full_name = excluded.full_name,
+            title = coalesce(contacts.title, excluded.title),
+            seniority = coalesce(excluded.seniority, contacts.seniority),
+            department = coalesce(excluded.department, contacts.department),
+            tier = excluded.tier, rec_rank = excluded.rec_rank, rec_score = excluded.rec_score,
+            recommended_at = now()`;
+    n++;
+  }
+  return { stored: n, recs };
+}
+
+/**
+ * PAID. Enrich the given contacts and store email/phone encrypted. Returns the
+ * number of records returned by ZoomInfo, which is the upper bound on credits
+ * spent (records already under management are free). Caller records it in
+ * `runs`.
+ */
+export async function storeEnrichment(
+  client: ZoomInfoClient,
+  companyId: string,
+  contactIds: string[]
+): Promise<{ records: number; withEmail: number }> {
+  const enriched = await enrichContacts(client, contactIds);
+  const sql = db();
+  let withEmail = 0;
+  for (const c of enriched) {
+    const fullName = `${c.firstName} ${c.lastName}`.trim();
+    if (c.email) withEmail++;
+    await sql`
+      insert into contacts (zi_contact_id, zi_company_id, full_name, title, seniority,
+                            email_enc, phone_enc, enriched_at, purge_after)
+      values (${c.contactId}, ${companyId}, ${fullName || "Unknown"}, ${c.title}, ${c.managementLevel},
+              ${c.email ? encryptPII(c.email) : null}, ${c.phone ? encryptPII(c.phone) : null},
+              now(), now() + ${`${PII_RETENTION_DAYS} days`}::interval)
+      on conflict (zi_contact_id) do update
+        set full_name = case when excluded.full_name = 'Unknown' then contacts.full_name else excluded.full_name end,
+            title = coalesce(excluded.title, contacts.title),
+            seniority = coalesce(excluded.seniority, contacts.seniority),
+            email_enc = coalesce(excluded.email_enc, contacts.email_enc),
+            phone_enc = coalesce(excluded.phone_enc, contacts.phone_enc),
+            enriched_at = now(),
+            purge_after = excluded.purge_after`;
+  }
+  return { records: enriched.length, withEmail };
+}
+
+export function zoomInfoFromEnv(freeOnly: boolean): ZoomInfoClient {
+  const need = (k: string) => {
+    const v = process.env[k];
+    if (!v) throw new Error(`${k} is not set`);
+    return v;
+  };
+  return new ZoomInfoClient({
+    clientId: need("ZI_CLIENT_ID"),
+    clientSecret: need("ZI_CLIENT_SECRET"),
+    tokenUrl: process.env.ZI_TOKEN_URL,
+    scope: process.env.ZI_SCOPE,
+    freeOnly,
+  });
+}

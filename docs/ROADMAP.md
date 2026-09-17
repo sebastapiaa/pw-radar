@@ -185,6 +185,28 @@ page, scopes, seeding page, export headers, logout. Form actions (notes, tags, o
 seeding) need a browser click-through. Not yet: analytics (Phase 4), light-theme polish,
 Apple HIG review (docs/DESIGN.md says after the build).
 
+**Second cut, same day, after Seb's review ("bland", "no contacts = no point"):**
+
+- Home page `/` is the Monday view: hero count, four tiles, top 10 accounts, topics
+  firing this week, business events this week, accounts being worked plus manual
+  seeds, and the last three machine runs. The full ranked list moved to `/findings`.
+  Row names link straight to the account page.
+- Account page rebuilt: score badge, "Why now" (generated profile if present, else a
+  deterministic summary from `src/lib/summary.ts`, every phrase traceable to a stored
+  signal), People, signal table with scope, history; side panel with outcome, tags,
+  notes.
+- **People model changed.** The free recommendation call carries name, title,
+  department and seniority, so every surfaced account can have its people for free:
+  "Find people · free" stores up to 25 with a buying-committee tier
+  (`db/migrations/002`). Email and phone are a per-person click, "Get email & phone ·
+  1 credit", counted in `runs` as job `enrich-click` with a 400/month soft cap in
+  code. The Sunday job does the same in bulk for the top 15. The top 10 accounts were
+  seeded with people (245 rows, 0 credits) on 2026-09-17.
+- The dashboard now calls ZoomInfo server-side, so Vercel needs the `ZI_*` variables
+  and `PII_ENCRYPTION_KEY` as well as the auth ones.
+- The Anthropic profile is now optional by design (Seb's question); the deterministic
+  summary is the default and the model paragraph, if ever enabled, replaces it.
+
 ## Phase 4 — Analytics
 
 Queries over own tables, charts on the dashboard: findings per week per topic, dead
