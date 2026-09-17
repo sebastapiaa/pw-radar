@@ -137,6 +137,31 @@ CSV export **in Salesloft person-import format only** (see `docs/ARCHITECTURE.md
 
 **Accept when:** Seb works a Monday from it without opening ZoomInfo's UI.
 
+**Progress 2026-09-17 (built ahead of Phase 1 acceptance by Seb's decision, see
+HANDOFF).** First cut of every item above is in `src/app/`:
+
+- Auth wall: `src/middleware.ts` + `src/lib/auth.ts`. Microsoft Entra ID (single
+  tenant, any @perimeterwatch.com account) or shared password, chosen by env. Signed
+  12h cookie, httpOnly/secure/lax. Hand-rolled OIDC+PKCE on `jose` rather than Auth.js
+  v5, which is still beta.
+- Ranked list `/` with the decay ramp (`--warmth` → `color-mix` in OKLCH from brand red
+  to cool), `007/042` numbering, age written out beside the colour, expand in place via
+  `<details>` with signals → scope, masked contacts with logged reveal, notes, tags,
+  outcome buttons. Tags `client`, `do-not-contact`, `partner:*` hide the row.
+- Account profile `/accounts/[id]`: generated prose with highlighted spans (renders
+  once Phase 2 writes `account_profiles`; spans citing no stored signal are dropped),
+  people, finding history, outcomes.
+- Manual seeding `/accounts/new` with required source tag; `/scopes` catalog.
+- Export `/api/export`: Salesloft person-import CSV only, decrypt at export, row in
+  `export_log`, 5/hour/actor. Custom-field names still to verify in the PerimeterWatch
+  Salesloft instance.
+- Outcome `contacted`/`meeting` also suppresses the company for 90 days.
+
+Verified with curl against the live database: redirect, login, list (200 rows), account
+page, scopes, seeding page, export headers, logout. Form actions (notes, tags, outcomes,
+seeding) need a browser click-through. Not yet: analytics (Phase 4), light-theme polish,
+Apple HIG review (docs/DESIGN.md says after the build).
+
 ## Phase 4 — Analytics
 
 Queries over own tables, charts on the dashboard: findings per week per topic, dead

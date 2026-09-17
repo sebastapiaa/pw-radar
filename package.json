@@ -17,10 +17,11 @@
     "job:weekly": "tsx --env-file-if-exists=.env workers/weekly.ts"
   },
   "dependencies": {
+    "jose": "^6.2.12",
     "next": "^15.0.0",
+    "postgres": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "postgres": "^3.4.0",
     "tsx": "^4.19.0"
   },
   "devDependencies": {

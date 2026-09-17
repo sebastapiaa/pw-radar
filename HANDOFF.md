@@ -62,9 +62,11 @@ done the same day (see `docs/ROADMAP.md` Phase 1 progress). Runs 2 and 3 go on t
 two days via `npm run job:daily`; then check the bulk balance is still 8,878. Tuning
 aids: `npm run db:stats`, `npm run rescore`, `npm run db:apply -- --reset-runs`.
 
-Git initialised 2026-09-17 with the first commit; GitHub remote, Railway cron service
-and Vercel project are Seb's steps (listed in the session that made this commit and in
-`docs/ARCHITECTURE.md` §Stack).
+Deployed 2026-09-17: GitHub `sebastapiaa/pw-radar`, Railway cron `radar-daily`
+(manual run verified), Vercel project for the dashboard. Phase 3 first cut is built
+(see `docs/ROADMAP.md` Phase 3 progress); Vercel needs `AUTH_SECRET`, `DASHBOARD_URL`
+and either the Entra vars or `AUTH_PASSWORD` before the wall lets anyone in. Phase 2
+(Sunday worker) is not yet written.
 
 Local toolchain verified (2026-09-17): `npm install`, `npm run typecheck` and
 `npm run dev` all work. `src/app/` holds a placeholder root page that only proves Next
@@ -114,6 +116,13 @@ with empty values.
   security leadership, C-suite). Details and the size-band analytics requirement are in
   `docs/ARCHITECTURE.md` §ICP. Constants already updated in `src/lib/scoring.ts`.
 - Standalone: no CRM integration, CSV export only.
+- Build order (2026-09-17): Seb chose to build Phase 3 (dashboard) while Phase 1's
+  two scheduled runs complete, and to write Phase 2 without running it until Phase 1
+  passes. Phase gating on *running* credit-spending code is unchanged.
+- Sign-in (2026-09-17): PerimeterWatch is a Microsoft 365 tenant (SPF includes
+  spf.protection.outlook.com). Auth is Microsoft Entra ID, single tenant, any
+  @perimeterwatch.com work account, with a shared-password gate as fallback if app
+  registration turns out to be admin-only. Provider chosen by env at runtime.
 - Hosting (2026-09-17): dashboard on Vercel, Postgres and cron workers on Railway.
   See `docs/ARCHITECTURE.md` §Stack for the cron schedules in UTC and the two
   database URLs.
