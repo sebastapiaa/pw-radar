@@ -1,0 +1,80 @@
+/* Tokens from docs/DESIGN.md. Dark is the console default. */
+:root {
+  --brand-red: #ff4944;
+  --canvas: #bababa;
+  --paper: #fefefe;
+  --ink: #060606;
+  --dark-bg: #141414;
+  --dark-text: #e9e9e7;
+  --cool: #6b7684;
+
+  --bg: var(--dark-bg);
+  --fg: var(--dark-text);
+  --muted: var(--cool);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: var(--canvas);
+    --fg: var(--ink);
+    --muted: #4a4a4a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 720px;
+  padding: 64px 24px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 24px;
+}
+
+h1 span {
+  color: var(--brand-red);
+}
+
+p {
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+dl {
+  margin: 32px 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  font-size: 14px;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+}

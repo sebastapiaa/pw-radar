@@ -1,0 +1,21 @@
+# dependencies and build
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets: every .env variant except the committed template
+.env
+.env.*
+!.env.example
+
+# local artefacts
+*.log
+probe-out/
+.DS_Store
+Thumbs.db
+
+# vercel / railway local state
+.vercel/
+.railway/
