@@ -1,13 +1,13 @@
 import Shell from "../components/Shell";
 import FindingCard from "../components/FindingCard";
-import { rankedFindings } from "@/lib/queries";
+import { cachedRankedFindings } from "@/lib/queries";
 import { ordinal, fmtInt } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 /** The full ranked list. One column, expand in place. docs/DESIGN.md §Layout. */
 export default async function FindingsPage() {
-  const findings = await rankedFindings(300);
+  const findings = await cachedRankedFindings(300);
 
   return (
     <Shell>

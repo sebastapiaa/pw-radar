@@ -121,6 +121,44 @@ API (`claude-haiku-4-5`, company-level data only, span-grounded output — see
 the Admin Portal delta within a few credits, and a second run the same week spends near
 zero (RUM working).
 
+### Phase 2b — Verification gate (added 2026-09-17)
+
+Between shortlist selection and enrichment, on every candidate, before any credit:
+deterministic pre-checks on free data (industry exclusion, HQ-vs-branch, liveness,
+distress, same-domain hierarchy proxy), a model review that may flag but never kill,
+and a corroboration floor (≥2 distinct core signal keys to enrich). Every decision is
+persisted in `gate_decisions`. Design in `docs/ARCHITECTURE.md` §Verification gate.
+
+**Accept when**, in one full Sunday cycle:
+
+1. Every shortlist candidate has one row in `gate_decisions` per check (industry,
+   location, liveness, distress, hierarchy, model_review, corroboration) with a
+   verdict and, for non-pass verdicts, a machine reason.
+2. `enrich_contacts` was called only for accounts whose gate status is `passed` or
+   `approved` and whose corroboration check passed. Query: no contact with
+   `enriched_at` in the run window belongs to a company with gate_status `flagged`
+   or `killed` at that time, unless a `gate_reviewed_by` approval precedes it.
+3. At least one flagged account renders on the dashboard with its reason and an
+   "Approve for enrichment" control, and stays unenriched until approved.
+4. The Admin Portal bulk-credit delta for the run matches `runs.credits_spent` within
+   a few credits.
+5. Calibration: the retroactive dry run (`npm run gate:report`) over the accounts
+   already in the database has been reviewed by Seb, and no check killed a real
+   prospect. Killed accounts are tagged and suppressed; anything ambiguous is a flag.
+
+**Calibration dry run 2026-09-17** (310 accounts with findings, model review off, 38 s,
+free): 276 passed, 23 flagged, 11 killed. Kills: 5 security vendors by industry
+(Doppel, GoGuardian, Halcyon, Drata, Varutra) and 6 IT providers by industry plus a
+provider-style name (TeamLogic IT, VectorUSA, Neudesic, Calance, ScaleNorth, Phoenix
+Group Information Systems), the latter tagged `partner:candidate`. Flags: 10
+IT-services-industry companies that are not providers (MedImpact, The Trade Desk,
+Canon Medical, Kratos, …), 11 shrinking headcount, 2 unresolved domains (a school
+district and a Marine unit). Two checks were loosened during calibration: "not in the
+growth subset" is no longer read as shrinking (a second subset positively identifies
+decline; no data = pass), and the IT-services industry alone flags instead of kills.
+Corroboration floor: 137 of 310 have ≥2 distinct core signals; 121 would enrich with no
+approval needed. Seb to review the list; it is the acceptance step 5 above.
+
 **Written 2026-09-17, NOT RUN** (by Seb's decision: write ahead, run only after Phase 1
 passes). `workers/weekly.ts`, `workers/retention.ts`, `src/lib/enrich.ts`,
 `src/lib/profile.ts`. Design notes from the build:
@@ -206,6 +244,17 @@ Apple HIG review (docs/DESIGN.md says after the build).
   and `PII_ENCRYPTION_KEY` as well as the auth ones.
 - The Anthropic profile is now optional by design (Seb's question); the deterministic
   summary is the default and the model paragraph, if ever enabled, replaces it.
+
+**Latency pass, same day.** Measured locally before: `/findings` 834 ms and 3.1 MB
+with ~1,600 queries per load (every row rendered its expanded body), `/` 262 ms with
+~15 queries. Changes: card bodies load on first open via one server action;
+home and findings data cached 60 s (`unstable_cache`, tags `home`/`findings`,
+invalidated by every write action; workers rely on the TTL); header stats collapsed to
+one query; indexes on `signals(zi_company_id, signal_date)` and `findings(created_at,
+zi_company_id)` (migration 003). `npm run perf <base-url>` measures any deployment.
+Unit tests: `npm test` (node:test via tsx) covers scoring, summary, committee
+selection, enrichment parsing, auth tokens and gate summaries. Still open: pinning
+Vercel's function region to Railway's Postgres region (Vercel runs iad1 today).
 
 ## Phase 4 — Analytics
 

@@ -7,11 +7,13 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "./db";
 import { requireSession } from "./session";
 import { decryptPII } from "./crypto";
+
+import { DEAD_REASONS } from "./taxonomy";
 
 const OUTCOMES = new Set(["contacted", "replied", "meeting", "dead"]);
 const TAG_RE = /^[a-z0-9][a-z0-9:_.-]{0,39}$/;
@@ -47,6 +49,8 @@ export async function setCompanyTags(formData: FormData) {
   await db()`update companies set tags = ${tags} where zi_company_id = ${companyId}`;
   revalidatePath("/");
   revalidatePath(back);
+  revalidateTag("home");
+  revalidateTag("findings");
 }
 
 export async function setContactTags(formData: FormData) {
@@ -64,13 +68,19 @@ export async function setOutcome(formData: FormData) {
   const companyId = String(formData.get("companyId") ?? "");
   const status = String(formData.get("status") ?? "");
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000) || null;
+  const reasonRaw = String(formData.get("reason") ?? "");
   const back = String(formData.get("back") ?? "/");
   if (!companyId || !OUTCOMES.has(status)) return;
+  // Dead requires a reason from the taxonomy; "other" requires a note.
+  const reason = (DEAD_REASONS as readonly string[]).includes(reasonRaw) ? reasonRaw : null;
+  if (status === "dead" && (!reason || (reason === "other" && !note))) {
+    redirect(`${back}?error=${encodeURIComponent("Marking dead needs a reason (and a note for 'other').")}`);
+  }
   const sql = db();
   await sql.begin(async (tx) => {
     await tx`
-      insert into outcomes (zi_company_id, actor, status, note)
-      values (${companyId}, ${s.actor}, ${status}, ${note})`;
+      insert into outcomes (zi_company_id, actor, status, note, reason)
+      values (${companyId}, ${s.actor}, ${status}, ${note}, ${status === "dead" ? reason : null})`;
     if (status === "contacted" || status === "meeting") {
       // Working it: keep it off the cold list for 90 days.
       await tx`
@@ -83,6 +93,24 @@ export async function setOutcome(formData: FormData) {
   });
   revalidatePath("/");
   revalidatePath(back);
+  revalidateTag("home");
+  revalidateTag("findings");
+}
+
+/**
+ * Seb approves a gate-flagged account for enrichment. Recorded with actor and
+ * time; the next Sunday run treats it as passed unless the gate now kills it.
+ */
+export async function approveGate(formData: FormData) {
+  const s = await requireSession();
+  const companyId = String(formData.get("companyId") ?? "");
+  const back = String(formData.get("back") ?? "/");
+  if (!companyId) return;
+  await db()`
+    update companies set gate_status = 'approved', gate_reviewed_by = ${s.actor}, gate_reviewed_at = now()
+    where zi_company_id = ${companyId} and gate_status in ('flagged','pending','passed')`;
+  revalidatePath(back);
+  revalidateTag("findings");
 }
 
 /**

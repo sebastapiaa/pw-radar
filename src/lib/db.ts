@@ -17,8 +17,9 @@ export function db() {
     ssl: "prefer",
     max: 4,
     onnotice: () => {},
-    // Never let the driver print connection details or row data.
-    debug: false,
+    // DB_DEBUG=1 logs one line per query (SQL text only, no parameters, no
+    // rows) so page query counts can be measured. Off in production.
+    debug: process.env.DB_DEBUG === "1" ? (_conn, query) => console.log(`[q] ${query.slice(0, 80).replace(/\s+/g, " ")}`) : false,
   });
   return client;
 }

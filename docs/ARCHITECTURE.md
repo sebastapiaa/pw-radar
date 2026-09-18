@@ -96,6 +96,40 @@ Worth knowing: ZoomInfo Advanced natively exports emails to Salesloft, so an ad-
 path exists inside ZoomInfo's own UI. The dashboard export exists because it carries
 the scoring and why-now context that path cannot.
 
+## Verification gate (added 2026-09-17)
+
+Sits in the Sunday worker between shortlist selection and enrichment, runs on every
+candidate (twice the shortlist size, so kills do not empty a week), and spends nothing.
+Code: `src/lib/gate.ts`. Decisions: `gate_decisions` (one row per candidate per
+check per run). Company state: `companies.gate_status` (`pending` → `passed` /
+`flagged` / `killed`, plus `approved` when Seb overrides a flag on `/gate`).
+
+**Calibration rule.** Anything ambiguous flags. A kill needs an unambiguous fact from a
+deterministic source. The model may flag and never kill. A flagged account stays on the
+list with its reason and is simply not enriched until approved. `npm run gate:report`
+replays the gate as a dry run over the accounts already in the database so a check that
+eats real prospects is caught before a Sunday run does it for real.
+
+| Check | Free source (role in `ROLE_TO_TOOL`) | Kill | Flag |
+|---|---|---|---|
+| industry | `industryFilter` = `search_companies` subset with `industryList` | `security_vendor` (software.security, bizservice.security) → tag `excluded:security-vendor`; `msp_candidate` (bizservice.techconsulting) → tag `partner:candidate` | `name_suggests_provider` (name matches MSP/MSSP/managed services) |
+| location | `locationType` = `search_companies` subset with `locationSearchType: HQ`, `state: usa.california` | — | `not_hq_in_ca`; records `location_type` hq/branch |
+| liveness | DNS (`node:dns`), `employmentTrend` = `search_companies` subset with `oneYearEmployeeGrowthRateMinimum: -15`, `jobPostings` = stored `search_scoops` Open Position / Hiring Plans | `dead_company` only when domain fails AND headcount shrinking AND no signal in 90 days | `domain_unresolved`, `shrinking_headcount` |
+| distress | stored `search_scoops` M&A / Divestiture / Layoffs (new daily "distress" group, unweighted in scoring) | `acquired`, `bankruptcy`, `shutdown` when the headline says the company is the target | `distress_signal` (layoffs, divestiture, M&A as acquirer or ambiguous) |
+| hierarchy | `hierarchyProxy` = `search_companies` by `companyWebsite`; **no free hierarchy tool exists** (parent filters deprecated, no parent field in output; `enrich_companies` has it but is paid) | never | never; records `parent_company_id` when a larger same-domain entity exists (`rolled_up`) |
+| model_review | `claude-haiku-4-5`, `messages.parse`, company-level data only, same grounding rules as profiles | never | free-text reason + `evidence_fields`; `skipped` without an API key |
+| corroboration | stored signals, last 30 days | — | `single_signal` when fewer than 2 distinct core signal keys (`kind:canonicalTopic`, ambient and distress excluded); listed, not enriched |
+
+Enrichment happens only for `passed` or `approved` accounts whose corroboration check
+passed. Killed accounts are tagged, suppressed for a year, and hidden from the list.
+
+**Dead reasons.** Marking an account dead in the UI requires a reason from a fixed
+taxonomy stored in `outcomes.reason`: `dead_company`, `wrong_entity`, `competitor`,
+`bad_fit`, `already_covered`, `other` (+ note). These feed Phase 7's fitted weights.
+
+**Analytics.** `/gate` shows the last run's kill/flag counts per check, per reason and
+per intent topic, and the queue awaiting approval.
+
 ## Deduplication
 
 - Join key is the ZoomInfo company ID. Everything keys off it.

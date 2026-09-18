@@ -11,7 +11,17 @@
 
 const MCP_ENDPOINT = "https://mcp.zoominfo.com/mcp";
 
-/** Tools that cost nothing. Safe to call in the daily loop. */
+/**
+ * Tools that cost nothing. Safe to call in the daily loop.
+ *
+ * The verification-gate roles (hierarchyProxy, employmentTrend, jobPostings,
+ * locationType, industryFilter) name the free data source behind each check
+ * so assertRoles() proves it exists at startup. Verified against tools/list
+ * 2026-09-17: there is NO free corporate-hierarchy tool (search_companies'
+ * parent filters are deprecated and its output has no parent field;
+ * enrich_companies has it but is paid). hierarchyProxy is a same-domain
+ * search and can only record a likely parent, never kill.
+ */
 export const FREE_ROLES = [
   "searchCompanies",
   "searchSignals",
@@ -19,6 +29,11 @@ export const FREE_ROLES = [
   "lookup",
   "findSimilar",
   "recommendedContacts",
+  "hierarchyProxy",
+  "employmentTrend",
+  "jobPostings",
+  "locationType",
+  "industryFilter",
 ] as const;
 
 /** Tools that spend bulk data credits. Weekly job only, shortlist only. */
@@ -55,6 +70,12 @@ const ROLE_TO_TOOL: Partial<Record<Role, string>> = {
   enrichCompanies: "enrich_companies",
   accountResearch: "account_research",
   contactResearch: "contact_research",
+  // verification gate data sources (all free, all subset filters on search)
+  hierarchyProxy: "search_companies",
+  employmentTrend: "search_companies",
+  jobPostings: "search_scoops",
+  locationType: "search_companies",
+  industryFilter: "search_companies",
 };
 
 export interface ToolInfo {

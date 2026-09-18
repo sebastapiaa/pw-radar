@@ -1,20 +1,28 @@
-import { contactsForCompany, notesFor, signalsForCompany, companyById } from "@/lib/queries";
+"use client";
+
+import { useState, useTransition } from "react";
+import { loadCard, type CardData } from "@/lib/card";
 import { addNote, setCompanyTags, setOutcome } from "@/lib/actions";
 import { fmtDate } from "@/lib/format";
 import ContactRowView from "./ContactRow";
 
 /**
- * Expanded card content: signals with their scope, contacts (masked), notes,
- * tags, outcome buttons. Server component; each form posts to a server action.
+ * Expanded card content, loaded on first open. The list page renders 300
+ * rows; eager bodies meant ~1,600 queries per page load. Now a row costs
+ * nothing until it is opened, then one server action with four parallel
+ * queries.
  */
-export default async function CardBody({ companyId, back }: { companyId: string; back: string }) {
-  const [signals, contacts, notes, company] = await Promise.all([
-    signalsForCompany(companyId, 12),
-    contactsForCompany(companyId),
-    notesFor("company", companyId),
-    companyById(companyId),
-  ]);
+export default function CardBody({ companyId, back, open }: { companyId: string; back: string; open: boolean }) {
+  const [data, setData] = useState<CardData | null>(null);
+  const [pending, start] = useTransition();
 
+  if (open && !data && !pending) {
+    start(async () => setData(await loadCard(companyId)));
+  }
+  if (!open) return null;
+  if (!data) return <div className="card-body muted small">Loading…</div>;
+
+  const { signals, contacts, notes, tags } = data;
   return (
     <div className="card-body">
       <section>
@@ -26,17 +34,14 @@ export default async function CardBody({ companyId, back }: { companyId: string;
             {signals.map((s) => (
               <li key={s.id}>
                 <span className="kind">{s.kind}</span>
+                <span className="topic">{s.topic}</span>
                 {s.kind === "intent" ? (
-                  <>
-                    <span className="topic">{s.topic}</span>
-                    <span className="muted">
-                      {s.rawScore ?? "—"}
-                      {s.audienceStrength ?? ""} · {fmtDate(s.signalDate)}
-                    </span>
-                  </>
+                  <span className="muted">
+                    {s.rawScore ?? "—"}
+                    {s.audienceStrength ?? ""} · {fmtDate(s.signalDate)}
+                  </span>
                 ) : (
                   <>
-                    <span className="topic">{s.topic}</span>
                     <span className="headline">
                       {s.link ? (
                         <a href={s.link} target="_blank" rel="noreferrer noopener">
@@ -63,12 +68,15 @@ export default async function CardBody({ companyId, back }: { companyId: string;
       <section>
         <h3 className="eyebrow">People</h3>
         {contacts.length === 0 ? (
-          <p className="muted">No contacts yet. The Sunday run enriches the shortlist.</p>
+          <p className="muted">None pulled yet. Open the account to find people (free).</p>
         ) : (
           <ul className="contacts">
-            {contacts.map((c) => (
-              <ContactRowView key={c.id} contact={c} back={back} />
-            ))}
+            {contacts
+              .filter((c) => c.tier !== "other")
+              .slice(0, 6)
+              .map((c) => (
+                <ContactRowView key={c.id} contact={c} back={back} />
+              ))}
           </ul>
         )}
       </section>
@@ -79,11 +87,12 @@ export default async function CardBody({ companyId, back }: { companyId: string;
           <form action={setOutcome} className="row">
             <input type="hidden" name="companyId" value={companyId} />
             <input type="hidden" name="back" value={back} />
-            {["contacted", "replied", "meeting", "dead"].map((s) => (
+            {["contacted", "replied", "meeting"].map((s) => (
               <button key={s} type="submit" name="status" value={s} className="button small">
                 {s}
               </button>
             ))}
+            <span className="muted small">Mark dead from the account page (needs a reason).</span>
           </form>
           <h3 className="eyebrow">Tags</h3>
           <form action={setCompanyTags} className="row">
@@ -92,7 +101,7 @@ export default async function CardBody({ companyId, back }: { companyId: string;
             <input
               type="text"
               name="tags"
-              defaultValue={company?.tags.join(", ") ?? ""}
+              defaultValue={tags.join(", ")}
               placeholder="client, do-not-contact, partner:name, event:name"
               aria-label="Tags, comma separated"
             />

@@ -103,27 +103,31 @@ export function classifyTier(p: { title: string; managementLevel: string; depart
 }
 
 /**
- * Pick up to `max` contacts covering the three tiers, in recommendation order
- * within each tier. Free step; nothing here spends.
+ * Pick up to `max` contacts covering the three tiers: round-robin one per
+ * tier (security, IT, C-suite) in recommendation order, then a second pass,
+ * so a five-person cap never misses a whole tier. "other" is never picked.
+ * Free step; nothing here spends.
  */
 export function selectCommittee(recs: Recommendation[], max = 5): Recommendation[] {
   const ordered = [...recs].sort((a, b) =>
     (b.reRankingScore >= 0 && a.reRankingScore >= 0 ? b.reRankingScore - a.reRankingScore : 0) || a.rank - b.rank
   );
-  const quota: Record<Recommendation["tier"], number> = { it: 2, security: 2, csuite: 2, other: 0 };
+  const queues: Record<"security" | "it" | "csuite", Recommendation[]> = {
+    security: ordered.filter((r) => r.tier === "security"),
+    it: ordered.filter((r) => r.tier === "it"),
+    csuite: ordered.filter((r) => r.tier === "csuite"),
+  };
   const picked: Recommendation[] = [];
-  for (const tier of ["security", "it", "csuite"] as const) {
-    for (const r of ordered) {
-      if (picked.length >= max) break;
-      if (r.tier === tier && quota[tier] > 0 && !picked.includes(r)) {
-        picked.push(r);
-        quota[tier]--;
+  let progress = true;
+  while (picked.length < max && progress) {
+    progress = false;
+    for (const tier of ["security", "it", "csuite"] as const) {
+      const next = queues[tier].shift();
+      if (next && picked.length < max) {
+        picked.push(next);
+        progress = true;
       }
     }
-  }
-  for (const r of ordered) {
-    if (picked.length >= max) break;
-    if (!picked.includes(r) && r.tier !== "other") picked.push(r);
   }
   return picked;
 }

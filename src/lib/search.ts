@@ -42,7 +42,16 @@ export const SCOOP_GROUPS = [
     scoopTypes: ["Pain Point", "Project", "Funding", "Mergers & Acquisitions (M&A)", "Facilities Relocation / Expansion", "Layoffs"],
     scoopTopics: ["52", "136", "163", "222", "227", "31", "135", "300", "306", "1", "22", "57", "21", "30"],
   },
+  {
+    // Stored for the verification gate's distress check, not for scoring
+    // (scoring gives these no weight via topic). No topic filter on purpose.
+    name: "distress",
+    scoopTypes: ["Mergers & Acquisitions (M&A)", "Divestiture", "Layoffs"],
+  },
 ] as const;
+
+/** Scoop types the gate reads as distress evidence rather than buying signals. */
+export const DISTRESS_TYPES = new Set(["Mergers & Acquisitions (M&A)", "Divestiture", "Layoffs"]);
 
 /** Scoop types that mean "trying to staff internally"; weighted up at 1,000+. */
 export const JOB_POSTING_TYPES = new Set(["Open Position", "Hiring Plans"]);

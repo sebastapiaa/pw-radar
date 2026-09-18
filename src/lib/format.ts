@@ -1,5 +1,14 @@
 /** Presentation helpers shared by server and client components. No data access. */
 
+export type SizeBand = "100-499" | "500-999" | "1000-5000" | "?";
+
+export function sizeBand(n?: number | null): SizeBand {
+  if (!n) return "?";
+  if (n < 500) return "100-499";
+  if (n < 1000) return "500-999";
+  return "1000-5000";
+}
+
 /** 0 = decayed, 1 = fresh. ~10 day half-life, matches recencyDecay in scoring. */
 export function warmth(ageDays: number | null): number {
   if (ageDays === null) return 0.2;

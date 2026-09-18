@@ -15,6 +15,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
         <nav className="nav">
           <Link href="/">Home</Link>
           <Link href="/findings">Findings</Link>
+          <Link href="/gate">Gate</Link>
           <Link href="/scopes">Scopes</Link>
           <Link href="/accounts/new">Add account</Link>
           <a href="/api/export" title="Salesloft person-import CSV, shortlist contacts">

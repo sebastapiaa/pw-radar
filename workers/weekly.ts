@@ -30,6 +30,7 @@ import { db, closeDb } from "../src/lib/db";
 import { notifyWeekly } from "../src/lib/notify";
 import { selectCommittee, storeRecommendations, storeEnrichment } from "../src/lib/enrich";
 import { generateProfile, type ProfileSignal } from "../src/lib/profile";
+import { runGate, summarize, type Candidate } from "../src/lib/gate";
 
 /** Tune against real output. Higher means more credits, not more insight. */
 const SHORTLIST_SIZE = Number(process.env.SHORTLIST_SIZE ?? 15);
@@ -49,39 +50,89 @@ async function main() {
     freeOnly: false, // this job is allowed to spend
   });
   await client.discoverTools();
-  client.assertRoles(["recommendedContacts", "enrichContacts"]);
+  client.assertRoles(["recommendedContacts", "enrichContacts", "industryFilter", "locationType", "employmentTrend", "hierarchyProxy"]);
 
   const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+  const gateOnly = process.argv.includes("--gate-only");
 
   const [{ run_id: runId }] = await sql<{ run_id: string }[]>`
-    insert into runs (job) values ('weekly') returning run_id`;
+    insert into runs (job) values (${gateOnly ? "weekly-gate" : "weekly"}) returning run_id`;
 
-  const stats = { shortlist: 0, weekTotal: 0, contactsPicked: 0, contactsEnriched: 0, creditsSpent: 0, profiles: 0, profilesRejected: 0 };
+  const stats = {
+    candidates: 0, gatePassed: 0, gateFlagged: 0, gateKilled: 0, uncorroborated: 0,
+    shortlist: 0, weekTotal: 0, contactsPicked: 0, contactsEnriched: 0, creditsSpent: 0, profiles: 0, profilesRejected: 0,
+  };
 
   try {
-    // Shortlist: best score per company over the last 7 days, excluding anything
-    // already being worked, tagged out, or enriched in the last 30 days.
-    const shortlist = await sql<{ zi_company_id: string; score: number; name: string }[]>`
+    // Candidates: best score per company over the last 7 days, excluding anything
+    // already being worked, tagged out, killed, or enriched in the last 30 days.
+    // Twice the shortlist size so gate kills do not empty the week.
+    const candidates = await sql<{ zi_company_id: string; score: number; name: string; domain: string | null; employee_count: number | null; state: string | null; gate_status: string }[]>`
       with best as (
         select distinct on (zi_company_id) zi_company_id, score
         from findings where created_at > now() - interval '7 days'
         order by zi_company_id, score desc
       )
-      select b.zi_company_id, b.score, c.name
+      select b.zi_company_id, b.score, c.name, c.domain, c.employee_count, c.state, c.gate_status
       from best b join companies c using (zi_company_id)
       where c.source = 'zoominfo'
+        and c.gate_status <> 'killed'
         and not (c.tags && ${SUPPRESSING_TAGS}::text[])
-        and not exists (select 1 from unnest(c.tags) t where t like 'partner:%')
+        and not exists (select 1 from unnest(c.tags) t where t like 'partner:%' or t like 'excluded:%')
         and not exists (select 1 from outcomes o where o.zi_company_id = b.zi_company_id
                           and o.status in ('contacted','replied','meeting','dead'))
         and not exists (select 1 from contacts k where k.zi_company_id = b.zi_company_id
                           and k.enriched_at > now() - interval '30 days')
       order by b.score desc
-      limit ${SHORTLIST_SIZE}`;
+      limit ${SHORTLIST_SIZE * 2}`;
     const [{ n: weekTotal }] = await sql<{ n: number }[]>`
       select count(distinct zi_company_id)::int as n from findings where created_at > now() - interval '7 days'`;
-    stats.shortlist = shortlist.length;
+    stats.candidates = candidates.length;
     stats.weekTotal = weekTotal;
+
+    // Verification gate: free checks + model review + corroboration, persisted.
+    const gate = await runGate(
+      client,
+      sql,
+      runId,
+      candidates.map<Candidate>((c) => ({
+        companyId: c.zi_company_id,
+        name: c.name,
+        domain: c.domain,
+        employeeCount: c.employee_count === null ? null : Number(c.employee_count),
+        state: c.state,
+      })),
+      { anthropic }
+    );
+    const gateBy = new Map(gate.map((g) => [g.companyId, g]));
+    const gs = summarize(gate);
+    stats.gatePassed = gs.overall.passed;
+    stats.gateFlagged = gs.overall.flagged;
+    stats.gateKilled = gs.overall.killed;
+    console.log(JSON.stringify({ job: "weekly", stage: "gate", runId, ...gs }));
+
+    // Enrich only: passed (or previously approved by Seb) AND corroborated.
+    // Flagged accounts stay listed and wait for approval on the dashboard.
+    const approved = new Set(candidates.filter((c) => c.gate_status === "approved").map((c) => c.zi_company_id));
+    const shortlist = candidates
+      .filter((c) => {
+        const g = gateBy.get(c.zi_company_id);
+        if (!g || g.overall === "killed") return false;
+        if (g.overall === "flagged" && !approved.has(c.zi_company_id)) return false;
+        if (!g.corroborated) {
+          stats.uncorroborated++;
+          return false;
+        }
+        return true;
+      })
+      .slice(0, SHORTLIST_SIZE);
+    stats.shortlist = shortlist.length;
+
+    if (gateOnly) {
+      await sql`update runs set finished_at = now(), status = 'ok', companies_seen = ${stats.candidates} where run_id = ${runId}`;
+      console.log(JSON.stringify({ job: "weekly", runId, gateOnly: true, ...stats }));
+      return;
+    }
 
     for (const company of shortlist) {
       // 1. Free recommendations stored for everyone (names, titles, tiers), then
@@ -113,7 +164,7 @@ async function main() {
     }
 
     await sql`
-      update runs set finished_at = now(), status = 'ok', companies_seen = ${stats.shortlist},
+      update runs set finished_at = now(), status = 'ok', companies_seen = ${stats.candidates},
         findings_written = 0, credits_spent = ${stats.creditsSpent}
       where run_id = ${runId}`;
 

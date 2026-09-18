@@ -13,9 +13,11 @@ import {
   signalsForCompany,
   sizeBand,
 } from "@/lib/queries";
-import { addNote, setCompanyTags, setOutcome, findPeople } from "@/lib/actions";
+import { addNote, setCompanyTags, setOutcome, findPeople, approveGate } from "@/lib/actions";
+import { gateDecisionsFor } from "@/lib/queries";
 import { buildSummary } from "@/lib/summary";
 import { ageLabel, fmtDate, fmtInt, warmth } from "@/lib/format";
+import { DEAD_REASONS, DEAD_LABELS } from "@/lib/taxonomy";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +25,27 @@ export const dynamic = "force-dynamic";
  * Account profile. Left: what we know and why now (summary, signals, people,
  * history). Right: what Seb does about it (outcome, tags, notes).
  */
-export default async function AccountPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AccountPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { id: raw } = await params;
+  const { error } = await searchParams;
   const id = decodeURIComponent(raw);
   const company = await companyById(id);
   if (!company) notFound();
 
-  const [profile, history, outcomes, signals, contacts, notes] = await Promise.all([
+  const [profile, history, outcomes, signals, contacts, notes, gate] = await Promise.all([
     profileFor(id),
     findingHistory(id),
     outcomesFor(id),
     signalsForCompany(id, 60),
     contactsForCompany(id),
     notesFor("company", id),
+    gateDecisionsFor(id),
   ]);
   const back = `/accounts/${encodeURIComponent(id)}`;
   const latest = history[0] ?? null;
@@ -82,6 +92,34 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
             ))}
           </p>
         </header>
+
+        {error && <p className="error">{error}</p>}
+
+        {company.gateStatus === "flagged" && (
+          <div className="banner">
+            <span>
+              <b>Flagged by the verification gate:</b> {company.gateReason ?? "see checks"}.{" "}
+              <span className="muted">Not enriched until approved.</span>
+            </span>
+            <form action={approveGate}>
+              <input type="hidden" name="companyId" value={id} />
+              <input type="hidden" name="back" value={back} />
+              <button type="submit" className="button small">
+                Approve for enrichment
+              </button>
+            </form>
+          </div>
+        )}
+        {company.gateStatus === "killed" && (
+          <div className="banner killed">
+            <span>
+              <b>Excluded by the verification gate:</b> {company.gateReason}. Hidden from the list; suppressed for a year.
+            </span>
+          </div>
+        )}
+        {company.gateStatus === "approved" && (
+          <p className="gate-facts">Gate flag approved by you. The next Sunday run may enrich this account.</p>
+        )}
 
         <div className="account-grid">
           <div className="account-main">
@@ -218,6 +256,38 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
               )}
             </section>
 
+            {(gate.length > 0 || company.locationType || company.parentCompanyId) && (
+              <section className="panel">
+                <header className="panel-head">
+                  <h2>Verification</h2>
+                  <span className="muted">{gate[0]?.createdAt ?? ""}</span>
+                </header>
+                <p className="gate-facts">
+                  {company.locationType && <>location {company.locationType} · </>}
+                  {company.employmentTrend && <>headcount {company.employmentTrend.replace(/_/g, " ")} · </>}
+                  {company.parentCompanyId && (
+                    <>
+                      rolls up to{" "}
+                      <Link href={`/accounts/${encodeURIComponent(company.parentCompanyId)}`}>{company.parentCompanyId}</Link>
+                    </>
+                  )}
+                </p>
+                {gate.length > 0 && (
+                  <table className="plain">
+                    <tbody>
+                      {gate.map((g, i) => (
+                        <tr key={i}>
+                          <td>{g.check}</td>
+                          <td className={g.verdict === "kill" ? "error" : g.verdict === "flag" ? "muted" : ""}>{g.verdict}</td>
+                          <td className="muted">{g.reason ?? ""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </section>
+            )}
+
             <section className="panel">
               <header className="panel-head">
                 <h2>History</h2>
@@ -250,7 +320,7 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
                 <input type="hidden" name="companyId" value={id} />
                 <input type="hidden" name="back" value={back} />
                 <div className="row">
-                  {["contacted", "replied", "meeting", "dead"].map((s) => (
+                  {["contacted", "replied", "meeting"].map((s) => (
                     <button
                       key={s}
                       type="submit"
@@ -264,6 +334,31 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
                 </div>
                 <input type="text" name="note" placeholder="Optional note with the outcome" aria-label="Outcome note" />
               </form>
+              <details className="others">
+                <summary className="muted small">Mark dead (needs a reason)</summary>
+                <form action={setOutcome} className="stack" style={{ marginTop: 8 }}>
+                  <input type="hidden" name="companyId" value={id} />
+                  <input type="hidden" name="back" value={back} />
+                  <input type="hidden" name="status" value="dead" />
+                  <label>
+                    Why
+                    <select name="reason" required defaultValue="">
+                      <option value="" disabled>
+                        Choose a reason
+                      </option>
+                      {DEAD_REASONS.map((r) => (
+                        <option key={r} value={r}>
+                          {DEAD_LABELS[r]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <input type="text" name="note" placeholder="Note (required for 'other')" aria-label="Dead note" />
+                  <button type="submit" className="button small ghost">
+                    Mark dead
+                  </button>
+                </form>
+              </details>
               {outcomes.length > 0 && (
                 <ul className="timeline">
                   {outcomes.map((o, i) => (

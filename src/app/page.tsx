@@ -1,15 +1,6 @@
 import Link from "next/link";
 import Shell from "./components/Shell";
-import {
-  headerStats,
-  rankedFindings,
-  recentScoops,
-  topicsThisWeek,
-  workingAccounts,
-  recentRuns,
-  seededAccounts,
-  sizeBand,
-} from "@/lib/queries";
+import { cachedHomeData, sizeBand } from "@/lib/queries";
 import { ageLabel, fmtInt, warmth } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,17 +8,10 @@ export const dynamic = "force-dynamic";
 /**
  * Home: the Monday view. What is hot, what just happened, what you are
  * working, and whether the machine ran. Everything links into an account.
+ * Data comes from one cached unit (60s, invalidated on writes).
  */
 export default async function Home() {
-  const [stats, top, scoops, topics, working, runs, seeded] = await Promise.all([
-    headerStats(),
-    rankedFindings(10),
-    recentScoops(7, 8),
-    topicsThisWeek(7),
-    workingAccounts(6),
-    recentRuns(3),
-    seededAccounts(5),
-  ]);
+  const { stats, top, scoops, topics, working, runs, seeded, gate } = await cachedHomeData();
   const lastRun = runs[0];
   const coreTopics = topics.filter((t) => t.scopeName).slice(0, 8);
   const maxTopic = Math.max(1, ...coreTopics.map((t) => t.companies));
@@ -63,7 +47,12 @@ export default async function Home() {
             hint={lastRun ? `${lastRun.job} · ${lastRun.status} · ${fmtInt(lastRun.companiesSeen)} companies` : ""}
             warn={lastRun?.status === "failed"}
           />
-          <Tile label="Credits this week" value={fmtInt(stats.creditsSpentWeek)} hint="of 500 monthly cap" />
+          <Tile
+            label="Awaiting approval"
+            value={gate ? fmtInt(gate.awaitingApproval) : "—"}
+            hint={gate ? `gate: ${gate.killed} killed · ${gate.flagged} flagged` : "gate has not run"}
+            href="/gate"
+          />
         </section>
 
         <div className="home-grid">
@@ -88,6 +77,11 @@ export default async function Home() {
                       <span className="facts">
                         {sizeBand(f.employeeCount)} · {f.city ?? "—"} · <span className="age">{ageLabel(f.ageDays)}</span>
                         {f.lastOutcome && <span className="pill">{f.lastOutcome}</span>}
+                        {f.gateStatus === "flagged" && (
+                          <span className="pill flag" title={f.gateReason ?? ""}>
+                            flagged
+                          </span>
+                        )}
                       </span>
                     </span>
                     <span className="score">{f.score}</span>
@@ -161,9 +155,7 @@ export default async function Home() {
               <Link href="/accounts/new">+ Add account</Link>
             </header>
             {working.length === 0 && seeded.length === 0 ? (
-              <p className="muted">
-                Nothing in progress. Mark an outcome on an account and it shows here.
-              </p>
+              <p className="muted">Nothing in progress. Mark an outcome on an account and it shows here.</p>
             ) : (
               <ul className="working">
                 {working.map((w) => (
@@ -205,12 +197,19 @@ export default async function Home() {
   );
 }
 
-function Tile({ label, value, hint, warn }: { label: string; value: string; hint?: string; warn?: boolean }) {
-  return (
-    <div className={`tile${warn ? " warn" : ""}`}>
+function Tile({ label, value, hint, warn, href }: { label: string; value: string; hint?: string; warn?: boolean; href?: string }) {
+  const body = (
+    <>
       <p className="eyebrow">{label}</p>
       <p className="value">{value}</p>
       {hint && <p className="hint">{hint}</p>}
-    </div>
+    </>
+  );
+  return href ? (
+    <Link href={href} className={`tile link-tile${warn ? " warn" : ""}`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={`tile${warn ? " warn" : ""}`}>{body}</div>
   );
 }

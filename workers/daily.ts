@@ -111,7 +111,8 @@ async function main() {
           select zi_company_id from companies
           where zi_company_id = any(${ids})
             and (tags && ${SUPPRESSING_TAGS}::text[]
-                 or exists (select 1 from unnest(tags) t where t like 'partner:%'))`
+                 or gate_status = 'killed'
+                 or exists (select 1 from unnest(tags) t where t like 'partner:%' or t like 'excluded:%'))`
       ).map((r) => r.zi_company_id)
     );
 

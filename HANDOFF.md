@@ -139,6 +139,15 @@ with empty values.
   as of 2026-09-17; Seb questioned whether it is needed. The account page shows a
   deterministic summary from stored signals (`src/lib/summary.ts`) unless a generated
   profile exists. Decide after a few weeks of use.
+- Verification gate (2026-09-17, Seb's spec): free deterministic checks + a
+  flag-only model review + a corroboration floor run on every Sunday candidate before
+  any credit; every decision persisted; flags need Seb's approval on `/gate`; dead
+  marking needs a taxonomy reason. There is **no free corporate-hierarchy source** in
+  ZoomInfo's MCP; hierarchy is a same-domain proxy that records a parent and never
+  kills. Acceptance test in `docs/ROADMAP.md` Phase 2b. Design in
+  `docs/ARCHITECTURE.md` §Verification gate. Calibration dry run: `npm run gate:report`;
+  the 2026-09-17 run (11 kills, all vendors/providers; 23 flags) is recorded in the
+  roadmap and awaits Seb's review as acceptance step 5.
 - People (2026-09-17): every ZoomInfo-sourced account can pull its recommended people
   for free (names, titles, buying-committee tier); email and phone are a per-person
   paid click or the Sunday batch. Credits stay behind a click or the Sunday job.
