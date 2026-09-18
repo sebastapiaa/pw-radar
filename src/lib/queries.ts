@@ -6,6 +6,7 @@
 import { unstable_cache } from "next/cache";
 import { db } from "./db";
 import { maskEmail } from "./crypto";
+import { AMBIENT_TOPICS } from "./scoring";
 
 export const SUPPRESSING_TAGS = ["client", "do-not-contact"];
 export const LIST_WINDOW_DAYS = 30;
@@ -332,12 +333,21 @@ export interface HeaderStats {
   creditsSpentWeek: number;
 }
 
-/** One round trip for the four header numbers. */
+/**
+ * One round trip for the four header numbers. "This week" counts only accounts
+ * that are actually visible on the list: same predicate as rankedFindings
+ * (not tagged out, not gate-killed), so the hero number and the list agree.
+ */
 export async function headerStats(): Promise<HeaderStats> {
   const sql = db();
   const [r] = await sql<{ this_week: number; last_run_at: Date | null; last_run_status: string | null; credits_week: number }[]>`
     select
-      (select count(distinct zi_company_id)::int from findings where created_at > now() - interval '7 days') as this_week,
+      (select count(distinct f.zi_company_id)::int
+         from findings f join companies c using (zi_company_id)
+        where f.created_at > now() - interval '7 days'
+          and c.gate_status <> 'killed'
+          and not (c.tags && ${SUPPRESSING_TAGS}::text[])
+          and not exists (select 1 from unnest(c.tags) t where t like 'partner:%' or t like 'excluded:%')) as this_week,
       (select started_at from runs order by started_at desc limit 1) as last_run_at,
       (select status from runs order by started_at desc limit 1) as last_run_status,
       (select coalesce(sum(credits_spent), 0)::int from runs where started_at > now() - interval '7 days') as credits_week`;
@@ -530,14 +540,21 @@ export interface TopicCount {
   companies: number;
 }
 
-/** Which intent topics fired this week, by distinct company. Core topics only. */
+/**
+ * Which intent topics fired this week, by distinct visible company. Ambient
+ * topics (Data Breach, Cyber Threats, …) are excluded: they fire for hundreds
+ * of companies every week and say nothing about buying (src/lib/scoring.ts).
+ */
 export async function topicsThisWeek(days = 7): Promise<TopicCount[]> {
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
     select s.topic, count(distinct s.zi_company_id)::int as companies,
            (select name from scopes where s.topic = any(intent_topics) limit 1) as scope_name
-    from signals s
+    from signals s join companies c using (zi_company_id)
     where s.signal_kind = 'intent' and s.signal_date > current_date - ${days}::int
+      and s.topic <> all(${[...AMBIENT_TOPICS]}::text[])
+      and c.gate_status <> 'killed'
+      and not exists (select 1 from unnest(c.tags) t where t like 'partner:%' or t like 'excluded:%')
     group by s.topic order by companies desc`;
   return rows.map((r) => ({
     topic: String(r.topic),

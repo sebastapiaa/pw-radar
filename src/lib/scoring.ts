@@ -211,15 +211,28 @@ export const SURFACE_THRESHOLD = 60;
  */
 export function whyNow(signals: RawSignal[], now = new Date()): string {
   if (!signals.length) return "No current signal.";
-  const sorted = [...signals].sort(
-    (a, b) => (b.signalDate?.getTime() ?? 0) - (a.signalDate?.getTime() ?? 0)
-  );
+  // Real signals first (events and core intent), ambient topics only as filler,
+  // freshest first within each group. Duplicate topics collapse to one line.
+  const rank = (s: RawSignal) => (s.kind === "scoop" ? 0 : AMBIENT_TOPICS.has(s.topic ?? "") ? 2 : 1);
+  const seen = new Set<string>();
+  const sorted = [...signals]
+    .sort((a, b) => rank(a) - rank(b) || (b.signalDate?.getTime() ?? 0) - (a.signalDate?.getTime() ?? 0))
+    .filter((s) => {
+      const key = `${s.kind}:${s.kind === "intent" ? canonicalTopic(s.topic) : s.headline ?? s.topic ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   const parts = sorted.slice(0, 3).map((s) => {
     const days = s.signalDate
       ? Math.round((now.getTime() - s.signalDate.getTime()) / 86_400_000)
       : null;
     const age = days === null ? "" : days === 0 ? ", today" : `, ${days}d ago`;
-    if (s.kind === "scoop" || s.kind === "news") return `${s.headline ?? "event"}${age}`;
+    if (s.kind === "scoop" || s.kind === "news") {
+      // Headlines carry a trailing "(City, State, Country)"; drop it and cap the length.
+      const h = (s.headline ?? "event").replace(/\s*\([^)]*\)\s*\.?$/, "").trim();
+      return `${h.length > 120 ? `${h.slice(0, 117)}…` : h}${age}`;
+    }
     return `${s.topic ?? "intent"} intent${age}`;
   });
   return parts.join(" · ");

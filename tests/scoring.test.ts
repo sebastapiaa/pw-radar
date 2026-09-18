@@ -65,13 +65,19 @@ test("recency decays with a 10 day half-life from the freshest signal", () => {
   assert.ok(Math.abs(r - 0.5) < 0.01, `expected ~0.5, got ${r}`);
 });
 
-test("whyNow is built from stored fields only and lists freshest first", () => {
+test("whyNow leads with events, then core intent, and pushes ambient topics last", () => {
   const s: RawSignal[] = [
+    { kind: "intent", topic: "Data Breach", signalDate: d(1) },
     { kind: "intent", topic: "SIEM", signalDate: d(9) },
     { kind: "scoop", topic: "Open Position", headline: "VP of IT", signalDate: d(2) },
+    { kind: "intent", topic: "Two-Factor Authentication", signalDate: d(3) },
+    { kind: "intent", topic: "Multifactor Authentication", signalDate: d(3) },
   ];
   const text = whyNow(s);
-  assert.ok(text.startsWith("VP of IT, 2d ago"), text);
-  assert.ok(text.includes("SIEM intent, 9d ago"), text);
+  const parts = text.split(" · ");
+  assert.equal(parts[0], "VP of IT, 2d ago", text);
+  assert.equal(parts[1], "Two-Factor Authentication intent, 3d ago", text);
+  assert.equal(parts[2], "SIEM intent, 9d ago", text);
+  assert.ok(!text.includes("Data Breach"), "ambient should not make the top three here");
   assert.equal(whyNow([]), "No current signal.");
 });
