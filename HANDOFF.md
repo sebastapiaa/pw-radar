@@ -129,6 +129,11 @@ with empty values.
   spf.protection.outlook.com). Auth is Microsoft Entra ID, single tenant, any
   @perimeterwatch.com work account, with a shared-password gate as fallback if app
   registration turns out to be admin-only. Provider chosen by env at runtime.
+- Where `ANTHROPIC_API_KEY` lives (2026-09-18): local `.env` and, once created, the
+  `radar-weekly` Railway service (gate model review, optional profiles). Not on
+  `radar-daily` (never calls a model) and not on Vercel today. If any in-UI model
+  action ships (profile regeneration, research buttons), the key must go into Vercel's
+  environment at that moment. `docs/SECURITY.md` applies to Vercel for the dashboard.
 - Hosting (2026-09-17): dashboard on Vercel, Postgres and cron workers on Railway.
   See `docs/ARCHITECTURE.md` §Stack for the cron schedules in UTC and the two
   database URLs.
