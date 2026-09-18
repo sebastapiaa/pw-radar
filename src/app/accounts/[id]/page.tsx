@@ -115,6 +115,13 @@ export default async function AccountPage({
             <span>
               <b>Excluded by the verification gate:</b> {company.gateReason}. Hidden from the list; suppressed for a year.
             </span>
+            <form action={approveGate}>
+              <input type="hidden" name="companyId" value={id} />
+              <input type="hidden" name="back" value={back} />
+              <button type="submit" className="button small ghost">
+                Restore to list
+              </button>
+            </form>
           </div>
         )}
         {company.gateStatus === "approved" && (

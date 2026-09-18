@@ -112,7 +112,7 @@ eats real prospects is caught before a Sunday run does it for real.
 
 | Check | Free source (role in `ROLE_TO_TOOL`) | Kill | Flag |
 |---|---|---|---|
-| industry | `industryFilter` = `search_companies` subset with `industryList` | `security_vendor` (software.security, bizservice.security) → tag `excluded:security-vendor`; `msp_candidate` (bizservice.techconsulting) → tag `partner:candidate` | `name_suggests_provider` (name matches MSP/MSSP/managed services) |
+| industry | `industryFilter` = `search_companies` subset with `industryList` / `companyTypeList` | `education` (industries education, education.k12, education.university, or company type education; Seb's decision 2026-09-17) → tag `excluded:education`; `security_vendor` (software.security, bizservice.security) → tag `excluded:security-vendor`; `msp_candidate` (bizservice.techconsulting **and** a provider-style name) → tag `partner:candidate` | `it_services_industry` (bizservice.techconsulting without a provider name), `name_suggests_provider` |
 | location | `locationType` = `search_companies` subset with `locationSearchType: HQ`, `state: usa.california` | — | `not_hq_in_ca`; records `location_type` hq/branch |
 | liveness | DNS (`node:dns`), `employmentTrend` = `search_companies` subset with `oneYearEmployeeGrowthRateMinimum: -15`, `jobPostings` = stored `search_scoops` Open Position / Hiring Plans | `dead_company` only when domain fails AND headcount shrinking AND no signal in 90 days | `domain_unresolved`, `shrinking_headcount` |
 | distress | stored `search_scoops` M&A / Divestiture / Layoffs (new daily "distress" group, unweighted in scoring) | `acquired`, `bankruptcy`, `shutdown` when the headline says the company is the target | `distress_signal` (layoffs, divestiture, M&A as acquirer or ambiguous) |
@@ -122,6 +122,9 @@ eats real prospects is caught before a Sunday run does it for real.
 
 Enrichment happens only for `passed` or `approved` accounts whose corroboration check
 passed. Killed accounts are tagged, suppressed for a year, and hidden from the list.
+Seb can restore a killed account from its page ("Restore to list"); that sets
+`approved`, strips the exclusion tags and the gate suppression, writes a note, and the
+gate never re-kills an approved account (its decisions are still logged).
 
 **Dead reasons.** Marking an account dead in the UI requires a reason from a fixed
 taxonomy stored in `outcomes.reason`: `dead_company`, `wrong_entity`, `competitor`,

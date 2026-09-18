@@ -61,6 +61,8 @@ export interface GateResult {
 
 export const SECURITY_INDUSTRIES = ["software.security", "bizservice.security"];
 export const MSP_INDUSTRIES = ["bizservice.techconsulting"];
+/** Seb's decision 2026-09-17: education is out of the ICP entirely. */
+export const EDUCATION_INDUSTRIES = ["education", "education.k12", "education.university"];
 /**
  * Provider-sounding names. Tuned on the 2026-09-17 dry run, where TeamLogic
  * IT, VectorUSA, Neudesic, Calance and Phoenix Group Information Systems sat
@@ -120,12 +122,14 @@ export async function runGate(
   // Growth is asked both ways: "≥ threshold" and "≤ threshold". A company in
   // neither set has no growth data and must not be read as shrinking
   // (calibration: the first dry run flagged 15% of accounts that way).
-  const [securityIds, mspIds, hqIds, growIds, shrinkIds] = await Promise.all([
+  const [securityIds, mspIds, hqIds, growIds, shrinkIds, eduIndustryIds, eduTypeIds] = await Promise.all([
     subset(client, ids, { industryList: SECURITY_INDUSTRIES }),
     subset(client, ids, { industryList: MSP_INDUSTRIES }),
     subset(client, ids, { locationSearchType: "HQ", state: "usa.california" }),
     subset(client, ids, { oneYearEmployeeGrowthRateMinimum: SHRINK_THRESHOLD }),
     subset(client, ids, { oneYearEmployeeGrowthRateMaximum: SHRINK_THRESHOLD }),
+    subset(client, ids, { industryList: EDUCATION_INDUSTRIES }),
+    subset(client, ids, { companyTypeList: ["education"] }),
   ]);
 
   // ---- stored signals for liveness/distress/corroboration ----
@@ -155,7 +159,11 @@ export async function runGate(
     const nameProvider = looksLikeProvider(c.name);
 
     // industry
-    if (securityIds.has(c.companyId)) {
+    if (eduIndustryIds.has(c.companyId) || eduTypeIds.has(c.companyId)) {
+      r.industryIds.push(...EDUCATION_INDUSTRIES.filter(() => eduIndustryIds.has(c.companyId)));
+      r.decisions.push({ check: "industry", verdict: "kill", reason: "education", evidence: { byIndustry: eduIndustryIds.has(c.companyId), byCompanyType: eduTypeIds.has(c.companyId) } });
+      r.tags.push("excluded:education");
+    } else if (securityIds.has(c.companyId)) {
       r.industryIds.push(...SECURITY_INDUSTRIES);
       r.decisions.push({ check: "industry", verdict: "kill", reason: "security_vendor", evidence: { industries: SECURITY_INDUSTRIES, nameMatch: nameProvider } });
       r.tags.push("excluded:security-vendor");
@@ -313,21 +321,23 @@ async function persist(sql: Sql, runId: string, results: GateResult[], byId: Map
           insert into gate_decisions (run_id, zi_company_id, check_name, verdict, reason, evidence)
           values (${runId}, ${r.companyId}, ${d.check}, ${d.verdict}, ${d.reason}, ${tx.json(d.evidence as never)})`;
       }
-      // An 'approved' account keeps its approval unless the gate now kills it.
+      // Seb's approval outranks the gate, kills included: a restored account is
+      // not re-killed by the same facts. The decision rows still record what
+      // the gate would have done, so an override stays visible in analytics.
       await tx`
         update companies set
           parent_company_id = ${r.parentCompanyId},
           location_type = ${r.locationType},
           employment_trend = ${r.employmentTrend},
           industry_ids = ${r.industryIds},
-          gate_status = case
-            when ${r.overall} = 'killed' then 'killed'
-            when gate_status = 'approved' then 'approved'
-            else ${r.overall} end,
-          gate_reason = case when gate_status = 'approved' and ${r.overall} <> 'killed' then gate_reason else ${r.reason} end,
-          tags = (select array(select distinct t from unnest(tags || ${r.tags}::text[]) t))
+          gate_status = case when gate_status = 'approved' then 'approved' else ${r.overall} end,
+          gate_reason = case when gate_status = 'approved' then gate_reason else ${r.reason} end,
+          tags = case when gate_status = 'approved' then tags
+                      else (select array(select distinct t from unnest(tags || ${r.tags}::text[]) t)) end
         where zi_company_id = ${r.companyId}`;
-      if (r.overall === "killed") {
+      const [{ approved }] = await tx<{ approved: boolean }[]>`
+        select gate_status = 'approved' as approved from companies where zi_company_id = ${r.companyId}`;
+      if (r.overall === "killed" && !approved) {
         await tx`
           insert into suppressions (zi_company_id, suppressed_until, reason)
           values (${r.companyId}, now() + interval '365 days', 'manual')

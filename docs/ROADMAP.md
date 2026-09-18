@@ -157,7 +157,16 @@ district and a Marine unit). Two checks were loosened during calibration: "not i
 growth subset" is no longer read as shrinking (a second subset positively identifies
 decline; no data = pass), and the IT-services industry alone flags instead of kills.
 Corroboration floor: 137 of 310 have ≥2 distinct core signals; 121 would enrich with no
-approval needed. Seb to review the list; it is the acceptance step 5 above.
+approval needed.
+
+**Applied for real the same evening** (`npm run gate:report -- --apply`, run job
+`gate-apply`, free) at Seb's request ahead of a demo, after adding education as a hard
+exclusion: 310 → 223 listed, 87 killed (76 education, 6 IT providers → `partner:candidate`,
+5 security vendors), 18 flagged with a pill. Rendered pages were cross-checked
+against the database (no killed id on `/findings` or `/`, every flagged id present with
+a pill, `/gate` queue complete). Seb to review the kills, UC San Diego Health in
+particular (typed "education" by ZoomInfo); "Restore to list" on an account page
+reverses a kill. Acceptance step 5 remains his review.
 
 **Written 2026-09-17, NOT RUN** (by Seb's decision: write ahead, run only after Phase 1
 passes). `workers/weekly.ts`, `workers/retention.ts`, `src/lib/enrich.ts`,

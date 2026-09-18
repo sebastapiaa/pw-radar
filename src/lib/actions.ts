@@ -106,11 +106,26 @@ export async function approveGate(formData: FormData) {
   const companyId = String(formData.get("companyId") ?? "");
   const back = String(formData.get("back") ?? "/");
   if (!companyId) return;
-  await db()`
-    update companies set gate_status = 'approved', gate_reviewed_by = ${s.actor}, gate_reviewed_at = now()
-    where zi_company_id = ${companyId} and gate_status in ('flagged','pending','passed')`;
+  const sql = db();
+  await sql.begin(async (tx) => {
+    // Flagged → approved. Killed → restored: the exclusion tags and the gate's
+    // suppression come off too, and the approval is recorded so the next gate
+    // run does not re-kill it silently (persist() keeps 'approved' unless a
+    // new kill fires, which is logged in gate_decisions either way).
+    await tx`
+      update companies set
+        gate_status = 'approved', gate_reviewed_by = ${s.actor}, gate_reviewed_at = now(),
+        tags = array(select t from unnest(tags) t where t not like 'excluded:%' and t <> 'partner:candidate')
+      where zi_company_id = ${companyId} and gate_status in ('flagged','pending','passed','killed')`;
+    await tx`delete from suppressions where zi_company_id = ${companyId} and reason = 'manual'`;
+    await tx`
+      insert into notes (entity_type, entity_id, actor, body)
+      values ('company', ${companyId}, ${s.actor}, 'Gate decision overridden: approved / restored to list.')`;
+  });
   revalidatePath(back);
+  revalidatePath("/");
   revalidateTag("findings");
+  revalidateTag("home");
 }
 
 /**

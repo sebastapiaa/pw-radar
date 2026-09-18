@@ -7,6 +7,9 @@
  *   npm run gate:report              # all accounts with findings
  *   npm run gate:report -- 60        # top 60 by score
  *   npm run gate:report -- 60 --names  # include company names (stdout only)
+ *   npm run gate:report -- --apply   # NOT a dry run: persist decisions, statuses,
+ *                                    # tags and suppressions under a 'gate-apply' run.
+ *                                    # Free. Use to gate the current list outside Sunday.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -18,8 +21,14 @@ async function main() {
   const args = process.argv.slice(2);
   const limit = Number(args.find((a) => /^\d+$/.test(a)) ?? 1000);
   const names = args.includes("--names");
+  const apply = args.includes("--apply");
   const sql = db();
   try {
+    let runId: string | null = null;
+    if (apply) {
+      const [r] = await sql<{ run_id: string }[]>`insert into runs (job) values ('gate-apply') returning run_id`;
+      runId = r.run_id;
+    }
     const rows = await sql<{ zi_company_id: string; score: number; name: string; domain: string | null; employee_count: number | null; state: string | null }[]>`
       with best as (
         select distinct on (zi_company_id) zi_company_id, score
@@ -44,11 +53,14 @@ async function main() {
       state: c.state,
     }));
     const t0 = Date.now();
-    const results = await runGate(client, sql, null, candidates, { dryRun: true, anthropic });
+    const results = await runGate(client, sql, runId, candidates, { dryRun: !apply, anthropic });
+    if (runId) {
+      await sql`update runs set finished_at = now(), status = 'ok', companies_seen = ${results.length}, credits_spent = 0 where run_id = ${runId}`;
+    }
     const s = summarize(results);
     const label = (id: string) => (names ? `${id} ${rows.find((r) => r.zi_company_id === id)?.name ?? ""}` : id);
 
-    console.log(`\ngate dry run over ${results.length} accounts in ${Math.round((Date.now() - t0) / 1000)}s (model review: ${anthropic ? "on" : "off"})`);
+    console.log(`\ngate ${apply ? "APPLIED" : "dry run"} over ${results.length} accounts in ${Math.round((Date.now() - t0) / 1000)}s (model review: ${anthropic ? "on" : "off"})${runId ? ` run ${runId}` : ""}`);
     console.log(`overall: ${JSON.stringify(s.overall)}`);
     console.log("\nper check:");
     for (const [check, v] of Object.entries(s.byCheck)) console.log(`  ${check.padEnd(14)} ${JSON.stringify(v)}`);

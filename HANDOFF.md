@@ -115,6 +115,9 @@ with empty values.
   direct dial come from paid `enrich_contacts` (10 per call, not 25). The weekly
   budget in `docs/ZOOMINFO.md` still holds because RUM makes repeats free.
 
+- Education is out of the ICP (Seb, 2026-09-17): K-12, colleges and universities, and
+  anything ZoomInfo types as "education" are killed by the verification gate and
+  tagged `excluded:education`. Government is not excluded (not asked).
 - ICP: 100–5,000 employees, Southern California, full buying committee (IT leadership,
   security leadership, C-suite). Details and the size-band analytics requirement are in
   `docs/ARCHITECTURE.md` §ICP. Constants already updated in `src/lib/scoring.ts`.
