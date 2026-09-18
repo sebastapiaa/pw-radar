@@ -121,7 +121,11 @@ with empty values.
 
 - Education is out of the ICP (Seb, 2026-09-17): K-12, colleges and universities, and
   anything ZoomInfo types as "education" are killed by the verification gate and
-  tagged `excluded:education`. Government is not excluded (not asked).
+  tagged `excluded:education`. Government bodies are out too (Seb, 2026-09-18): industry
+  or company type government, tagged `excluded:government`.
+- Bulk balance check 2026-09-18 08:40 EDT: 8,878 remaining, unchanged from baseline.
+  Taken before that day's 06:02 PT run, so it proves zero spend through run 1, the
+  manual Railway run and three gate applications. Friday's check must be after 06:00 PT.
 - ICP: 100–5,000 employees, Southern California, full buying committee (IT leadership,
   security leadership, C-suite). Details and the size-band analytics requirement are in
   `docs/ARCHITECTURE.md` §ICP. Constants already updated in `src/lib/scoring.ts`.

@@ -63,6 +63,8 @@ export const SECURITY_INDUSTRIES = ["software.security", "bizservice.security"];
 export const MSP_INDUSTRIES = ["bizservice.techconsulting"];
 /** Seb's decision 2026-09-17: education is out of the ICP entirely. */
 export const EDUCATION_INDUSTRIES = ["education", "education.k12", "education.university"];
+/** Seb's decision 2026-09-18: government bodies are out too (cities, counties, agencies, courts, military). */
+export const GOVERNMENT_INDUSTRIES = ["government"];
 /**
  * Provider-sounding names. Tuned on the 2026-09-17 dry run, where TeamLogic
  * IT, VectorUSA, Neudesic, Calance and Phoenix Group Information Systems sat
@@ -122,7 +124,7 @@ export async function runGate(
   // Growth is asked both ways: "≥ threshold" and "≤ threshold". A company in
   // neither set has no growth data and must not be read as shrinking
   // (calibration: the first dry run flagged 15% of accounts that way).
-  const [securityIds, mspIds, hqIds, growIds, shrinkIds, eduIndustryIds, eduTypeIds] = await Promise.all([
+  const [securityIds, mspIds, hqIds, growIds, shrinkIds, eduIndustryIds, eduTypeIds, govIndustryIds, govTypeIds] = await Promise.all([
     subset(client, ids, { industryList: SECURITY_INDUSTRIES }),
     subset(client, ids, { industryList: MSP_INDUSTRIES }),
     subset(client, ids, { locationSearchType: "HQ", state: "usa.california" }),
@@ -130,6 +132,8 @@ export async function runGate(
     subset(client, ids, { oneYearEmployeeGrowthRateMaximum: SHRINK_THRESHOLD }),
     subset(client, ids, { industryList: EDUCATION_INDUSTRIES }),
     subset(client, ids, { companyTypeList: ["education"] }),
+    subset(client, ids, { industryList: GOVERNMENT_INDUSTRIES }),
+    subset(client, ids, { companyTypeList: ["government"] }),
   ]);
 
   // ---- stored signals for liveness/distress/corroboration ----
@@ -163,6 +167,10 @@ export async function runGate(
       r.industryIds.push(...EDUCATION_INDUSTRIES.filter(() => eduIndustryIds.has(c.companyId)));
       r.decisions.push({ check: "industry", verdict: "kill", reason: "education", evidence: { byIndustry: eduIndustryIds.has(c.companyId), byCompanyType: eduTypeIds.has(c.companyId) } });
       r.tags.push("excluded:education");
+    } else if (govIndustryIds.has(c.companyId) || govTypeIds.has(c.companyId)) {
+      r.industryIds.push(...GOVERNMENT_INDUSTRIES.filter(() => govIndustryIds.has(c.companyId)));
+      r.decisions.push({ check: "industry", verdict: "kill", reason: "government", evidence: { byIndustry: govIndustryIds.has(c.companyId), byCompanyType: govTypeIds.has(c.companyId) } });
+      r.tags.push("excluded:government");
     } else if (securityIds.has(c.companyId)) {
       r.industryIds.push(...SECURITY_INDUSTRIES);
       r.decisions.push({ check: "industry", verdict: "kill", reason: "security_vendor", evidence: { industries: SECURITY_INDUSTRIES, nameMatch: nameProvider } });
