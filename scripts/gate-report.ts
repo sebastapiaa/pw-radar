@@ -10,6 +10,8 @@
  *   npm run gate:report -- --apply   # NOT a dry run: persist decisions, statuses,
  *                                    # tags and suppressions under a 'gate-apply' run.
  *                                    # Free. Use to gate the current list outside Sunday.
+ *   npm run gate:report -- --apply --pending   # only accounts the gate has never seen
+ *                                    # (gate_status = 'pending'); run after each daily job.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -22,6 +24,7 @@ async function main() {
   const limit = Number(args.find((a) => /^\d+$/.test(a)) ?? 1000);
   const names = args.includes("--names");
   const apply = args.includes("--apply");
+  const pendingOnly = args.includes("--pending");
   const sql = db();
   try {
     let runId: string | null = null;
@@ -38,6 +41,7 @@ async function main() {
       select b.zi_company_id, b.score, c.name, c.domain, c.employee_count, c.state
       from best b join companies c using (zi_company_id)
       where c.source = 'zoominfo'
+        and (${!pendingOnly} or c.gate_status = 'pending')
       order by b.score desc limit ${limit}`;
 
     const client = zoomInfoFromEnv(true);

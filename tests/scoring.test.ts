@@ -53,6 +53,16 @@ test("MFA and 2FA are one signal for stacking; SIEM plus a job post is two", () 
   assert.equal(stackBonus(mixed), 1.35);
 });
 
+test("distress scoops carry no scoring weight and do not stack", () => {
+  const f = { employeeCount: 800, state: "CA", country: "US" };
+  const acq: RawSignal[] = [{ kind: "scoop", topic: "Mergers & Acquisitions (M&A)", headline: "X to be acquired by Y", signalDate: d(1) }];
+  assert.equal(scoreCompany(f, acq).score, 0);
+  const mixed: RawSignal[] = [...acq, { kind: "intent", topic: "Cloud Security", rawScore: 90, audienceStrength: "A", signalDate: d(2) }];
+  assert.equal(stackBonus(mixed), 1.0);
+  assert.equal(scoreCompany(f, mixed).signalCount, 1);
+  assert.ok(!whyNow(mixed).includes("acquired"));
+});
+
 test("job postings weigh more at 1,000+ employees", () => {
   const s: RawSignal[] = [{ kind: "scoop", topic: "Open Position", headline: "SOC analyst", signalDate: d(1) }];
   assert.equal(signalStrength(s, { employeeCount: 300 }), 0.8);

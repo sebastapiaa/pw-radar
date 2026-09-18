@@ -57,10 +57,14 @@ uses Railway's public TCP proxy URL; the deployed workers will get the internal
 `DATABASE_URL`. Credit caps set: 500 bulk/month, 200 AI actions/month (see
 `docs/ZOOMINFO.md` §Budget).
 
-**Phase 0 accepted 2026-09-17.** Current phase: **Phase 1, daily worker**, run 1 of 3
-done the same day (see `docs/ROADMAP.md` Phase 1 progress). Runs 2 and 3 go on the next
-two days via `npm run job:daily`; then check the bulk balance is still 8,878. Tuning
-aids: `npm run db:stats`, `npm run rescore`, `npm run db:apply -- --reset-runs`.
+**Phase 0 accepted 2026-09-17.** Current phase: **Phase 1, daily worker**, runs 1 and 2
+of 3 done (2026-09-17 local + Railway manual, 2026-09-18 scheduled), all at 0 credits.
+Run 3 is the 2026-09-19 06:00 PT cron; then check the bulk balance is still 8,878.
+Tuning aids: `npm run db:stats`, `npm run rescore` (whole window, replaces the latest
+run's rows; prefer `npm run rescore:run` which recomputes one run in place),
+`npm run db:apply -- --reset-runs`. After each daily run until the gate is in the
+daily job: `npm run gate:report -- --apply --pending` (free apart from the model
+review; cents).
 
 Deployed 2026-09-17: GitHub `sebastapiaa/pw-radar`, Railway cron `radar-daily`
 (manual run verified), Vercel project for the dashboard. Phase 3 first cut is built

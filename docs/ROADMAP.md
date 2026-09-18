@@ -100,8 +100,15 @@ run, batch deduped by id), 0 credits. Two build lessons: do not set a custom
 `npm ci` build command (collides with Railway's node_modules cache mount), and
 `tsx` must be a runtime dependency.
 
-Remaining for acceptance: the scheduled runs on 2026-09-18 and 2026-09-19, then a
-balance check that still reads 8,878.
+**Run 2 of 3, scheduled, 2026-09-18 06:02 PT:** ok, 2,425 companies, 4,422 signals,
+16 new findings, 0 credits. The intent batch was unchanged (still dated 09-12); the new
+findings were scoops. Six of the 16 had surfaced only on M&A scoops, which the scorer
+was still weighting; fixed the same morning (distress scoops now carry zero weight,
+`npm run rescore:run` recomputed the run in place: 10 remain). The gate then killed 4
+(3 education, 1 security vendor) and flagged 1.
+
+Remaining for acceptance: the scheduled run on 2026-09-19, then a balance check that
+still reads 8,878.
 
 ## Phase 2 — Weekly worker
 
@@ -167,6 +174,17 @@ against the database (no killed id on `/findings` or `/`, every flagged id prese
 a pill, `/gate` queue complete). Seb to review the kills, UC San Diego Health in
 particular (typed "education" by ZoomInfo); "Restore to list" on an account page
 reverses a kill. Acceptance step 5 remains his review.
+
+**Model review calibrated 2026-09-18** with `ANTHROPIC_API_KEY` set locally. First
+prompt flagged 77 of 223, wrongly including law firms (legal is the proven vertical),
+software companies read as "vendors", accounts hiring security staff, and duplicates
+of the corroboration and liveness checks. Prompt rewritten with the ICP (who is a
+prospect, what not to re-flag): 61 flags, of which 26 government bodies, 13 hiring or
+provider-shaped, 7 software companies (still over-read; e.g. BlackLine, Procore), 5
+nonprofits. MySpace passed both times: ZoomInfo's facts (523 staff, stable, HQ CA)
+give the model nothing to flag on. Two runs cost cents. Flags need Seb's approval on
+`/gate`; nothing was killed by the model. `--pending` mode gates only accounts the gate
+has never seen, for use after each daily run.
 
 **Written 2026-09-17, NOT RUN** (by Seb's decision: write ahead, run only after Phase 1
 passes). `workers/weekly.ts`, `workers/retention.ts`, `src/lib/enrich.ts`,

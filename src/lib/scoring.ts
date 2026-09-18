@@ -113,6 +113,17 @@ export function canonicalTopic(topic?: string): string {
 const JOB_POSTING_TOPICS = new Set(["Open Position", "Hiring Plans"]);
 
 /**
+ * Scoop types stored only as evidence for the verification gate's distress
+ * check. They are not buying signals: zero strength, and they never count
+ * toward the stack. Defined here (not in search.ts) to avoid an import cycle.
+ */
+export const DISTRESS_TYPES = new Set(["Mergers & Acquisitions (M&A)", "Divestiture", "Layoffs"]);
+
+export function isDistress(s: RawSignal): boolean {
+  return s.kind === "scoop" && DISTRESS_TYPES.has(s.topic ?? "");
+}
+
+/**
  * Strongest single signal drives strength; stacking is handled separately.
  *
  * Scoops carry no score from ZoomInfo, so they get a flat 0.8 base: a discrete
@@ -120,10 +131,11 @@ const JOB_POSTING_TOPICS = new Set(["Open Position", "Hiring Plans"]);
  * postings at 1,000+ employees are weighted up per docs/ARCHITECTURE.md §ICP.
  */
 export function signalStrength(signals: RawSignal[], facts: CompanyFacts = {}): number {
-  if (!signals.length) return 0;
+  const scored = signals.filter((s) => !isDistress(s));
+  if (!scored.length) return 0;
   const large = (facts.employeeCount ?? 0) >= 1000;
   return Math.max(
-    ...signals.map((s) => {
+    ...scored.map((s) => {
       if (s.kind === "intent") {
         const base = Math.min((s.rawScore ?? 60) / 100, 1);
         const aud = AUDIENCE_WEIGHT[(s.audienceStrength ?? "c").toLowerCase()] ?? 0.75;
@@ -140,10 +152,11 @@ export function signalStrength(signals: RawSignal[], facts: CompanyFacts = {}): 
 
 /** Exponential decay, ~10 day half-life. Timing is the whole product. */
 export function recencyDecay(signals: RawSignal[], now = new Date()): number {
-  if (!signals.length) return 0;
+  const scored = signals.filter((s) => !isDistress(s));
+  if (!scored.length) return 0;
   const HALF_LIFE_DAYS = 10;
   const freshest = Math.min(
-    ...signals.map((s) => {
+    ...scored.map((s) => {
       if (!s.signalDate) return 30;
       return (now.getTime() - s.signalDate.getTime()) / 86_400_000;
     })
@@ -158,7 +171,9 @@ export function recencyDecay(signals: RawSignal[], now = new Date()): number {
  */
 export function stackBonus(signals: RawSignal[]): number {
   const distinct = new Set(
-    signals.map((s) => `${s.kind}:${s.kind === "intent" ? canonicalTopic(s.topic) : (s.topic ?? s.headline ?? "")}`)
+    signals
+      .filter((s) => !isDistress(s))
+      .map((s) => `${s.kind}:${s.kind === "intent" ? canonicalTopic(s.topic) : (s.topic ?? s.headline ?? "")}`)
   );
   const n = distinct.size;
   if (n <= 1) return 1.0;
@@ -185,7 +200,7 @@ export function scoreCompany(
     signalStrength: strength,
     recencyDecay: decay,
     stackBonus: stack,
-    signalCount: signals.length,
+    signalCount: signals.filter((s) => !isDistress(s)).length,
     score: Math.round(fit * strength * decay * stack * 100),
   };
 }
@@ -209,7 +224,8 @@ export const SURFACE_THRESHOLD = 60;
  * ONLY these fields and constrain the model to use nothing else. A hallucinated
  * reason in a security pitch is worse than no reason.
  */
-export function whyNow(signals: RawSignal[], now = new Date()): string {
+export function whyNow(allSignals: RawSignal[], now = new Date()): string {
+  const signals = allSignals.filter((s) => !isDistress(s));
   if (!signals.length) return "No current signal.";
   // Real signals first (events and core intent), ambient topics only as filler,
   // freshest first within each group. Duplicate topics collapse to one line.

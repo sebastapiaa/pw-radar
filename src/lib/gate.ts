@@ -388,11 +388,24 @@ const Review = z.object({
   evidence_fields: z.array(z.string()),
 });
 
-const REVIEW_SYSTEM = `You review prospect accounts for a Southern California managed security provider before any money is spent researching them. You see company-level facts and the automated gate's evidence. Decide whether the account is a plausible prospect for co-managed security services (managed SOC, SIEM, cloud security, pen testing, GRC).
+const REVIEW_SYSTEM = `You review prospect accounts for PerimeterWatch, a Southern California provider of co-managed security (managed SOC, SIEM co-management, cloud security, threat hunting, penetration testing, GRC, email and identity security), before any money is spent researching them. You see company-level facts and the automated gate's evidence.
 
-You may PASS or FLAG. You may never reject. Flag when something in the evidence makes the account look like: a security vendor or IT service provider itself; a subsidiary, branch or shell rather than the operating company; a company in the middle of being acquired or wound down; an entity whose signals are probably noise (e.g. a university department, a government body, a staffing agency). Otherwise pass.
+Who IS a prospect (do not flag for these):
+- Any operating company with 100 to 5,000 staff that runs its own IT: software and SaaS companies, fintech, healthcare, manufacturing, logistics, real estate, media, retail, biotech. Being a software company or a "vendor" of something other than security is NOT a reason to flag.
+- Law firms and professional services. Legal is PerimeterWatch's proven vertical.
+- Companies with in-house IT or security staff, or that are hiring security roles. Co-managed security augments internal teams; existing staff is a positive fit, never a negative.
+- Nonprofits, hospitals and research organizations with real IT estates.
 
-Rules: use only the facts given; never name or refer to any individual person; no outreach language. Return a one-sentence reason and list the evidence field names you relied on.`;
+FLAG only when the evidence makes the account look like one of these:
+- A security vendor, MSP, MSSP or IT service provider itself (sells security or IT services to others).
+- A government body, public agency or military unit.
+- A subsidiary, branch, department or shell rather than the operating company.
+- In the middle of being acquired, wound down, or dormant (for example a legacy brand that no longer operates at the stated size).
+- An entity whose signals are probably noise for a security sale (a school, a trade association, a staffing agency).
+
+Do NOT flag because of the corroboration or liveness checks; those are handled separately and already visible to the reader. Repeating them is not useful.
+
+You may PASS or FLAG. You may never reject. Rules: use only the facts given; never name or refer to any individual person; no outreach language. Return a one-sentence reason and list the evidence field names you relied on.`;
 
 async function modelReview(anthropic: Anthropic, c: Candidate, r: GateResult, sigs: { signal_kind: string; topic: string | null; headline: string | null; signal_date: Date | null }[]) {
   const facts = {

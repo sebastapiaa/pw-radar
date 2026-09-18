@@ -51,7 +51,7 @@ export const SCOOP_GROUPS = [
 ] as const;
 
 /** Scoop types the gate reads as distress evidence rather than buying signals. */
-export const DISTRESS_TYPES = new Set(["Mergers & Acquisitions (M&A)", "Divestiture", "Layoffs"]);
+export { DISTRESS_TYPES } from "./scoring";
 
 /** Scoop types that mean "trying to staff internally"; weighted up at 1,000+. */
 export const JOB_POSTING_TYPES = new Set(["Open Position", "Hiring Plans"]);

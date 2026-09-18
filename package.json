@@ -12,6 +12,7 @@
     "rescore": "tsx --env-file-if-exists=.env scripts/rescore.ts",
     "gate:report": "tsx --env-file-if-exists=.env scripts/gate-report.ts",
     "refresh:why-now": "tsx --env-file-if-exists=.env scripts/refresh-why-now.ts",
+    "rescore:run": "tsx --env-file-if-exists=.env scripts/rescore-run.ts",
     "perf": "tsx --env-file-if-exists=.env scripts/perf.ts",
     "test": "tsx --test --env-file-if-exists=.env tests/*.test.ts",
     "zi:discover": "tsx --env-file-if-exists=.env scripts/discover.ts",
