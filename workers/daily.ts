@@ -31,6 +31,7 @@ import {
 } from "../src/lib/search";
 import { scoreCompany, SURFACE_THRESHOLD, whyNow, type RawSignal } from "../src/lib/scoring";
 import { notifyDaily } from "../src/lib/notify";
+import { runGate, summarize, type Candidate } from "../src/lib/gate";
 
 const SUPPRESS_DAYS = 30;
 /** Look-back for "new". Overlaps run to run on purpose; suppression dedupes. */
@@ -49,7 +50,7 @@ async function main() {
   });
 
   await client.discoverTools();
-  client.assertRoles(["searchCompanies", "searchSignals", "searchScoops"]);
+  client.assertRoles(["searchCompanies", "searchSignals", "searchScoops", "industryFilter", "locationType", "employmentTrend", "hierarchyProxy"]);
 
   const [{ run_id: runId }] = await sql<{ run_id: string }[]>`
     insert into runs (job) values ('daily') returning run_id`;
@@ -190,6 +191,34 @@ async function main() {
       }
     });
     stats.findingsWritten = surfaced.length;
+
+    // 6b. Verification gate on everything that surfaced today, before it is
+    //     seen. Free checks only here; the model review runs when a key is
+    //     present (it is not on the daily Railway service by design), and the
+    //     Sunday job re-reviews its candidates anyway. Killed accounts keep
+    //     their finding row but are hidden and suppressed; flagged ones show
+    //     a pill and wait for approval.
+    if (surfaced.length > 0) {
+      const candidates = surfaced.map<Candidate>(({ companyId }) => {
+        const f = facts.get(companyId);
+        return {
+          companyId,
+          name: f?.name ?? byCompany.get(companyId)?.intents[0]?.companyName ?? companyId,
+          domain: f?.website?.replace(/^https?:\/\//, "").replace(/^www\./, "") ?? null,
+          employeeCount: f?.employeeCount ?? null,
+          state: f?.state ?? null,
+        };
+      });
+      const gate = await runGate(client, sql, runId, candidates, {
+        anthropic: process.env.ANTHROPIC_API_KEY ? new (await import("@anthropic-ai/sdk")).default() : null,
+      });
+      const gs = summarize(gate);
+      stats.calls += Math.ceil(candidates.length / 50) * 9 + candidates.length;
+      log({ job: "daily", stage: "gate", runId, ...gs.overall, reasons: gs.byReason });
+      // Telegram counts should not include what the gate just hid.
+      const killed = new Set(gate.filter((g) => g.overall === "killed").map((g) => g.companyId));
+      for (let i = surfaced.length - 1; i >= 0; i--) if (killed.has(surfaced[i].companyId)) surfaced.splice(i, 1);
+    }
 
     await finish(sql, runId, "ok", stats);
 

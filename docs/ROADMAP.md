@@ -110,6 +110,12 @@ was still weighting; fixed the same morning (distress scoops now carry zero weig
 Remaining for acceptance: the scheduled run on 2026-09-19, then a balance check that
 still reads 8,878.
 
+**Status 2026-10-19:** 33 consecutive daily runs, all ok, `credits_spent` 0 on every
+one. Run 3 (2026-09-19) and every run since happened on schedule. The post-run balance
+screenshot has not been provided; that is the only open item. The gate now runs inside
+the daily worker on each day's surfaced accounts (deterministic checks only on Railway,
+where no Anthropic key exists).
+
 ## Phase 2 — Weekly worker
 
 Implement `workers/weekly.ts`: shortlist from existing findings, contacts via the free
@@ -198,8 +204,13 @@ passes). `workers/weekly.ts`, `workers/retention.ts`, `src/lib/enrich.ts`,
   name, title, management level, department and job function, so the buying committee
   (security, IT leadership, C-suite) is selected from free data and only those 5 are
   enriched. Verified live on 2026-09-17.
-- `enrich_contacts` response shape is unverified (paid). `parseEnriched()` accepts the
-  usual envelopes and aborts loudly otherwise, so a surprise costs one call.
+- `enrich_contacts` response shape: **verified from Seb's first paid click
+  2026-09-18**, which the parser rejected as designed: `{ contact_1: {...},
+  contact_2: {...}, totalEnriched, totalErrors }`. `parseEnriched()` handles it as of
+  2026-10-19 (fixture test in `tests/enrich.test.ts`); the record fields inside each
+  `contact_N` are still assumed (firstName, lastName, email, phone, mobilePhone,
+  jobTitle, managementLevel, DNC flags) until one real call confirms them. Re-clicking
+  the same person is free under RUM if the first call was charged.
   `directPhoneDoNotCall` / `mobilePhoneDoNotCall` are honoured before storage.
 - `enrich_company_signals` is deliberately not called: the daily job already stores
   intent and scoop detail from free search.

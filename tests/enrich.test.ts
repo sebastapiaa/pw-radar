@@ -41,6 +41,22 @@ test("committee selection covers tiers and never fills with 'other'", () => {
   assert.equal(picked.length, 5);
 });
 
+test("enrichment parser accepts ZoomInfo's live numbered-key shape", () => {
+  const live = {
+    contact_1: { personId: "111", firstName: "A", lastName: "B", email: "a@b.com", phone: "555", jobTitle: "CIO" },
+    contact_2: { data: { personId: "222", firstName: "C", lastName: "D", email: null, mobilePhone: "666" } },
+    totalEnriched: 2,
+    totalErrors: 0,
+  };
+  const rows = parseEnriched(live);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.contactId), ["111", "222"]);
+  assert.equal(rows[0].email, "a@b.com");
+  assert.equal(rows[1].email, null);
+  assert.equal(rows[1].phone, "666");
+  assert.equal(parseEnriched({ totalEnriched: 0, totalErrors: 1 }).length, 0, "all-error response is an empty list, not a crash");
+});
+
 test("enrichment parser accepts common envelopes and rejects unknown shapes", () => {
   const rows = parseEnriched({ data: [{ id: "9", attributes: { firstName: "A", lastName: "B", email: "a@b.com", phone: "1", directPhoneDoNotCall: true, mobilePhone: "2" } }] });
   assert.equal(rows.length, 1);

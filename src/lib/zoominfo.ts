@@ -233,6 +233,15 @@ export class ZoomInfoClient {
       this.token = null;
       res = await this.post(method, params);
     }
+
+    // Rate limited: honour Retry-After, else back off 5s, 15s, 45s. Seen live on
+    // 2026-10-19 when the gate's per-account hierarchy lookups ran 638 at once.
+    for (let attempt = 1; res.status === 429 && attempt <= 3; attempt++) {
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 5000 * 3 ** (attempt - 1);
+      await new Promise((r) => setTimeout(r, waitMs));
+      res = await this.post(method, params);
+    }
     if (res.status === 401) {
       throw new Error(`ZoomInfo MCP ${method} unauthorized: check ZI_CLIENT_ID/ZI_CLIENT_SECRET`);
     }

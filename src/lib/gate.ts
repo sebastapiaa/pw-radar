@@ -250,10 +250,13 @@ export async function runGate(
     });
   }
 
-  // hierarchy proxy: same-domain entities, only for candidates still alive
+  // hierarchy proxy: same-domain entities, only for candidates still alive.
+  // One call per account, so it is the gate's only per-account cost; keep it
+  // serial with a short gap (ZoomInfo returned 429s at concurrency 4 over 638).
   const alive = candidates.filter((c) => c.domain && !results.get(c.companyId)!.decisions.some((d) => d.verdict === "kill"));
-  await mapLimit(alive, 4, async (c) => {
+  await mapLimit(alive, 1, async (c) => {
     const r = results.get(c.companyId)!;
+    await new Promise((res) => setTimeout(res, 150));
     try {
       const rows = await client.callJson<{ data?: { id: string; attributes?: Record<string, unknown> }[] }>("hierarchyProxy", {
         companyWebsite: `https://${c.domain}`,

@@ -46,25 +46,31 @@ catalog.
 
 ## Current state
 
-Scaffold plus a working ZoomInfo client. Nothing is deployed. Files present are
-structure, schema, docs and stubs with real logic where the design is settled and `TODO`
-where it is not.
+**As of 2026-10-19.** Deployed and running: the daily worker (Railway cron
+`radar-daily`, 06:00 PT) has run every day since 2026-09-17 with zero failures and
+zero credits (33 runs; 1,100 findings; six weekly intent batches seen). The dashboard
+is live on Vercel behind a shared password. The verification gate is built,
+calibrated, and from this commit runs inside the daily job on everything that
+surfaces (deterministic checks on Railway; the model review additionally wherever
+`ANTHROPIC_API_KEY` exists, which today is local only).
 
-Phase 0 progress (2026-09-17): credentials issued and in local `.env` (never committed);
-tool mapping verified live; Railway Postgres provisioned, `db/schema.sql` and
-`db/seed_scopes.sql` applied via `npm run db:apply` (11 tables, 8 scopes). Local work
-uses Railway's public TCP proxy URL; the deployed workers will get the internal
-`DATABASE_URL`. Credit caps set: 500 bulk/month, 200 AI actions/month (see
-`docs/ZOOMINFO.md` §Budget).
+**Phase 0 accepted 2026-09-17. Phase 1 is complete in fact but not formally closed:**
+the acceptance test wants Seb's ZoomInfo balance screenshot taken after a run, and the
+only one received (2026-09-18 08:40 EDT, 8,878) predates that day's run. Our own
+`credits_spent` is 0 across every run. One screenshot closes it.
 
-**Phase 0 accepted 2026-09-17.** Current phase: **Phase 1, daily worker**, runs 1 and 2
-of 3 done (2026-09-17 local + Railway manual, 2026-09-18 scheduled), all at 0 credits.
-Run 3 is the 2026-09-19 06:00 PT cron; then check the bulk balance is still 8,878.
-Tuning aids: `npm run db:stats`, `npm run rescore` (whole window, replaces the latest
-run's rows; prefer `npm run rescore:run` which recomputes one run in place),
-`npm run db:apply -- --reset-runs`. After each daily run until the gate is in the
-daily job: `npm run gate:report -- --apply --pending` (free apart from the model
-review; cents).
+**What stalled, and why the tool went unused for a month:** Seb's two "Get email &
+phone" clicks on 2026-09-18 failed to parse ZoomInfo's paid response (live shape is
+`{contact_1, contact_2, …, totalEnriched, totalErrors}`; fixed in `parseEnriched()`
+2026-10-19 with a fixture test, not yet re-tried against a real call). No contact has
+an email; no outcome, note or approval has been recorded; 68 flagged accounts await
+review. Phase 2's `radar-weekly` Railway service was never created.
+
+Tuning aids: `npm run db:stats`, `npm run rescore:run` (recompute one run in place),
+`npm run gate:report -- --apply --pending` (gate accounts the gate has never seen; the
+hierarchy lookup is one ZoomInfo call per account, so run it in chunks of ~100 or
+ZoomInfo returns 429s; the client now retries with backoff), `npm run db:apply --
+--reset-runs`.
 
 Deployed 2026-09-17: GitHub `sebastapiaa/pw-radar`, Railway cron `radar-daily`
 (manual run verified), Vercel project for the dashboard. Phase 3 first cut is built

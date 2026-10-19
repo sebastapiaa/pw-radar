@@ -175,19 +175,32 @@ export async function enrichContacts(client: ZoomInfoClient, contactIds: string[
   return out;
 }
 
-/** Accepts {data:[{id,attributes}]}, {results:[...]}, {contacts:[...]} or a bare array. */
+/**
+ * Accepts the live shape, verified from Seb's first paid click on 2026-09-18:
+ *   { contact_1: {...}, contact_2: {...}, totalEnriched: n, totalErrors: n }
+ * plus the envelopes the docs suggested ({data:[...]}, {results:[...]},
+ * {contacts:[...]}, bare array) in case ZoomInfo changes it back.
+ */
 export function parseEnriched(res: unknown): EnrichedContact[] {
-  const root = res as Record<string, unknown>;
-  const list: unknown =
-    Array.isArray(res) ? res : root.data ?? root.results ?? root.contacts ?? root.enriched ?? root.result;
+  const root = (res ?? {}) as Record<string, unknown>;
+  let list: unknown = Array.isArray(res) ? res : root.data ?? root.results ?? root.contacts ?? root.enriched ?? root.result;
+  if (!Array.isArray(list)) {
+    const numbered = Object.keys(root)
+      .filter((k) => /^contact_\d+$/.test(k))
+      .sort((a, b) => Number(a.slice(8)) - Number(b.slice(8)))
+      .map((k) => root[k])
+      .filter((v) => v && typeof v === "object");
+    if (numbered.length || typeof root.totalEnriched === "number") list = numbered;
+  }
   if (!Array.isArray(list)) {
     throw new Error(
-      `enrich_contacts: unrecognised response shape (keys: ${Object.keys(root ?? {}).join(",")}). Aborting before further spend.`
+      `enrich_contacts: unrecognised response shape (keys: ${Object.keys(root).join(",")}). Aborting before further spend.`
     );
   }
   return list.map((row) => {
     const r = row as Record<string, unknown>;
-    const a = ((r.attributes ?? r.data ?? r) as Record<string, unknown>) ?? {};
+    // Numbered entries may wrap the record one level down ({ data: {...} } or { result: {...} }).
+    const a = ((r.attributes ?? r.data ?? r.result ?? r) as Record<string, unknown>) ?? {};
     const directDnc = a.directPhoneDoNotCall === true || a.directPhoneDoNotCall === "true";
     const mobileDnc = a.mobilePhoneDoNotCall === true || a.mobilePhoneDoNotCall === "true";
     const direct = directDnc ? null : str(a.phone ?? a.directPhone);
