@@ -134,12 +134,28 @@ async function main() {
       return;
     }
 
+    // Record the shortlist as chosen, so the weekly digest shows exactly this.
+    const whyNowBy = new Map(
+      (
+        await sql<{ zi_company_id: string; why_now: string | null }[]>`
+          select distinct on (zi_company_id) zi_company_id, why_now from findings
+          where zi_company_id = any(${shortlist.map((c) => c.zi_company_id)})
+          order by zi_company_id, created_at desc`
+      ).map((r) => [r.zi_company_id, r.why_now])
+    );
+    for (const [i, company] of shortlist.entries()) {
+      await sql`
+        insert into weekly_shortlist (run_id, zi_company_id, rank, score, why_now)
+        values (${runId}, ${company.zi_company_id}, ${i + 1}, ${company.score}, ${whyNowBy.get(company.zi_company_id) ?? null})`;
+    }
+
     for (const company of shortlist) {
-      // 1. Free recommendations stored for everyone (names, titles, tiers), then
-      //    the buying committee selected from them.
+      // 1. Free recommendations stored for everyone (titles, tiers; names arrive
+      //    with enrichment since Oct 2026), then the buying committee selected.
       const { recs } = await storeRecommendations(client, company.zi_company_id);
       const picked = selectCommittee(recs, CONTACTS_PER_COMPANY);
       stats.contactsPicked += picked.length;
+      await sql`update weekly_shortlist set contacts_picked = ${picked.length} where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
       if (!picked.length) continue;
 
       // 2. Ceiling check before spending. Upper bound: every record could be new.
@@ -154,6 +170,7 @@ async function main() {
       stats.creditsSpent += r.records;
       stats.contactsEnriched += r.records;
       await sql`update runs set credits_spent = ${stats.creditsSpent} where run_id = ${runId}`;
+      await sql`update weekly_shortlist set contacts_enriched = ${r.withEmail} where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
 
       // 4. Profile, company-level data only.
       if (anthropic) {

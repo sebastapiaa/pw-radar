@@ -157,6 +157,21 @@ create table scopes (
   intent_topics   text[] not null default '{}'
 );
 
+-- The Sunday run's shortlist per run, for the weekly digest and its export.
+create table weekly_shortlist (
+  run_id            uuid not null,
+  zi_company_id     text not null references companies(zi_company_id),
+  rank              integer not null,
+  score             numeric not null,
+  why_now           text,
+  contacts_picked   integer not null default 0,
+  contacts_enriched integer not null default 0,
+  created_at        timestamptz not null default now(),
+  primary key (run_id, zi_company_id)
+);
+
+create index on weekly_shortlist (run_id, rank);
+
 -- Free-form notes on accounts and contacts. Append-only.
 create table notes (
   id              bigserial primary key,

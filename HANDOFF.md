@@ -54,17 +54,14 @@ calibrated, and from this commit runs inside the daily job on everything that
 surfaces (deterministic checks on Railway; the model review additionally wherever
 `ANTHROPIC_API_KEY` exists, which today is local only).
 
-**Phase 0 accepted 2026-09-17. Phase 1 is complete in fact but not formally closed:**
-the acceptance test wants Seb's ZoomInfo balance screenshot taken after a run, and the
-only one received (2026-09-18 08:40 EDT, 8,878) predates that day's run. Our own
-`credits_spent` is 0 across every run. One screenshot closes it.
+**Phase 0 accepted 2026-09-17. Phase 1 accepted 2026-10-20** (balance 8,877 = baseline
+8,878 minus one enrichment click; daily loop spent 0). **Current phase: Phase 2**, the
+Sunday worker: written, shortlist persisted for the `/weekly` digest, enrichment parser
+proven on one real paid call (2026-10-19), but the `radar-weekly` Railway service does
+not exist yet. Creating it is the next step; recipe in `docs/ARCHITECTURE.md` §Stack.
 
-**What stalled, and why the tool went unused for a month:** Seb's two "Get email &
-phone" clicks on 2026-09-18 failed to parse ZoomInfo's paid response (live shape is
-`{contact_1, contact_2, …, totalEnriched, totalErrors}`; fixed in `parseEnriched()`
-2026-10-19 with a fixture test, not yet re-tried against a real call). No contact has
-an email; no outcome, note or approval has been recorded; 68 flagged accounts await
-review. Phase 2's `radar-weekly` Railway service was never created.
+Known ZoomInfo drift: the paid `enrich_contacts` shape is `{contact_N…, totalEnriched,
+totalErrors}`; free recommendations no longer carry names (since Oct 2026). Both handled.
 
 Tuning aids: `npm run db:stats`, `npm run rescore:run` (recompute one run in place),
 `npm run gate:report -- --apply --pending` (gate accounts the gate has never seen; the

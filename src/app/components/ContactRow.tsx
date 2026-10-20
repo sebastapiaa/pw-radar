@@ -25,12 +25,16 @@ export default function ContactRowView({ contact: c }: { contact: ContactRow; ba
   const [pending, start] = useTransition();
   const tier = c.tier ? TIER_LABEL[c.tier] ?? "" : "";
 
+  // ZoomInfo stopped including names in free recommendations (Oct 2026); the
+  // title stands in until enrichment supplies the name.
+  const label = c.fullName && !/^this data describes/i.test(c.fullName) ? c.fullName : null;
   return (
     <li className={c.tier === "other" ? "other" : ""}>
       <span className="who">
-        <b>{c.fullName}</b>
-        {c.title && <span className="muted"> · {c.title}</span>}
-        {!c.title && c.seniority && <span className="muted"> · {c.seniority}</span>}
+        {label ? <b>{label}</b> : <b className="muted">{c.title || c.seniority || "Contact"}</b>}
+        {label && c.title && <span className="muted"> · {c.title}</span>}
+        {!label && <span className="muted small"> · name arrives with email</span>}
+        {!c.title && label && c.seniority && <span className="muted"> · {c.seniority}</span>}
         {tier && <span className="pill">{tier}</span>}
         {c.tags.length > 0 && <span className="muted"> · {c.tags.join(", ")}</span>}
       </span>

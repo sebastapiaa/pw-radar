@@ -57,15 +57,30 @@ export async function recommendedContacts(
   }).filter((r) => r.contactId);
 }
 
-function parseBrief(brief: string) {
+/**
+ * Two brief formats have been seen live:
+ *   2026-09-17  "Name, Title | management_level: [X] | seniority: X | ..."
+ *   2026-10-19  "This data describes the job position of a person: job_title: Title | management_level: [X] | ..."
+ * The second carries NO name: names now come only from paid enrichment, and
+ * the UI shows the title until then. Handle both.
+ */
+export function parseBrief(brief: string) {
   const [head, ...fields] = brief.split("|").map((s) => s.trim());
-  const comma = head.indexOf(",");
-  const name = comma >= 0 ? head.slice(0, comma).trim() : head;
-  const title = comma >= 0 ? head.slice(comma + 1).trim() : "";
   const get = (key: string) => {
     const f = fields.find((x) => x.toLowerCase().startsWith(`${key}:`));
     return f ? f.slice(key.length + 1).replace(/[[\]]/g, "").trim() : "";
   };
+  let name = "";
+  let title = "";
+  const jt = head.match(/job_title:\s*(.*)$/i);
+  if (jt) {
+    title = jt[1].trim();
+  } else {
+    const comma = head.indexOf(",");
+    name = comma >= 0 ? head.slice(0, comma).trim() : head.trim();
+    title = comma >= 0 ? head.slice(comma + 1).trim() : "";
+    if (/^this data describes/i.test(name)) name = "";
+  }
   return {
     name,
     title,
@@ -246,7 +261,8 @@ export async function storeRecommendations(
   const sql = db();
   let n = 0;
   for (const r of recs) {
-    if (!r.name) continue;
+    // Name may be empty (ZoomInfo dropped it from the brief in Oct 2026); an
+    // enriched name on the existing row is never overwritten by an empty one.
     await sql`
       insert into contacts (zi_contact_id, zi_company_id, full_name, title, seniority, department,
                             tier, rec_rank, rec_score, recommended_at)
@@ -254,8 +270,8 @@ export async function storeRecommendations(
               ${r.department || null}, ${r.tier}, ${r.rank}, ${r.reRankingScore >= 0 ? r.reRankingScore : r.score},
               now())
       on conflict (zi_contact_id) do update
-        set full_name = excluded.full_name,
-            title = coalesce(contacts.title, excluded.title),
+        set full_name = case when excluded.full_name = '' then contacts.full_name else excluded.full_name end,
+            title = coalesce(nullif(excluded.title, ''), contacts.title),
             seniority = coalesce(excluded.seniority, contacts.seniority),
             department = coalesce(excluded.department, contacts.department),
             tier = excluded.tier, rec_rank = excluded.rec_rank, rec_score = excluded.rec_score,
@@ -285,11 +301,11 @@ export async function storeEnrichment(
     await sql`
       insert into contacts (zi_contact_id, zi_company_id, full_name, title, seniority,
                             email_enc, phone_enc, enriched_at, purge_after)
-      values (${c.contactId}, ${companyId}, ${fullName || "Unknown"}, ${c.title}, ${c.managementLevel},
+      values (${c.contactId}, ${companyId}, ${fullName}, ${c.title}, ${c.managementLevel},
               ${c.email ? encryptPII(c.email) : null}, ${c.phone ? encryptPII(c.phone) : null},
               now(), now() + ${`${PII_RETENTION_DAYS} days`}::interval)
       on conflict (zi_contact_id) do update
-        set full_name = case when excluded.full_name = 'Unknown' then contacts.full_name else excluded.full_name end,
+        set full_name = case when excluded.full_name = '' then contacts.full_name else excluded.full_name end,
             title = coalesce(excluded.title, contacts.title),
             seniority = coalesce(excluded.seniority, contacts.seniority),
             email_enc = coalesce(excluded.email_enc, contacts.email_enc),

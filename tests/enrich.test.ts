@@ -1,6 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyTier, selectCommittee, parseEnriched, type Recommendation } from "../src/lib/enrich";
+import { classifyTier, selectCommittee, parseEnriched, parseBrief, type Recommendation } from "../src/lib/enrich";
+
+test("brief parser handles both the September and October formats", () => {
+  const sept = parseBrief("Jane Doe, Technology Infrastructure | management_level: [Director] | seniority: Director | job_function: [Infrastructure] | department: [Information Technology] | industry: [X]");
+  assert.equal(sept.name, "Jane Doe");
+  assert.equal(sept.title, "Technology Infrastructure");
+  assert.equal(sept.department, "Information Technology");
+  const oct = parseBrief("This data describes the job position of a person: job_title: Associate Director | management_level: [Director] | seniority: Assistant Director | job_function: [] | department: [] | industry: [Pharmaceuticals]");
+  assert.equal(oct.name, "", "October format carries no name");
+  assert.equal(oct.title, "Associate Director");
+  assert.equal(oct.managementLevel, "Director");
+  assert.equal(oct.department, "");
+});
 
 const rec = (over: Partial<Recommendation>): Recommendation => ({
   contactId: "1",

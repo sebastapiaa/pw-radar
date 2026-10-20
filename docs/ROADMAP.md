@@ -110,11 +110,11 @@ was still weighting; fixed the same morning (distress scoops now carry zero weig
 Remaining for acceptance: the scheduled run on 2026-09-19, then a balance check that
 still reads 8,878.
 
-**Status 2026-10-19:** 33 consecutive daily runs, all ok, `credits_spent` 0 on every
-one. Run 3 (2026-09-19) and every run since happened on schedule. The post-run balance
-screenshot has not been provided; that is the only open item. The gate now runs inside
-the daily worker on each day's surfaced accounts (deterministic checks only on Railway,
-where no Anthropic key exists).
+**Accepted 2026-10-20.** 33 consecutive daily runs, all ok, `credits_spent` 0 on every
+one. Admin Portal License Center on 2026-10-20: bulk used 1,223, remaining 8,877. The
+one-credit move from the 8,878 baseline is Seb's successful "Get email & phone" click
+on 2026-10-19 (run job `enrich-click`, credits_spent 1), not the daily loop. The gate
+now runs inside the daily worker on each day's surfaced accounts.
 
 ## Phase 2 — Weekly worker
 
@@ -219,6 +219,16 @@ passes). `workers/weekly.ts`, `workers/retention.ts`, `src/lib/enrich.ts`,
   signal id or scope slug does not check out is dropped. Text matching outreach
   patterns rejects the whole profile. Untested until `ANTHROPIC_API_KEY` exists.
 - Retention job ran once against the live DB: purged 0, as expected with no contacts.
+- **Weekly digest (Seb's request 2026-10-20):** the run writes its shortlist to
+  `weekly_shortlist` (rank, score, why-now, contacts picked/enriched). `/weekly` shows
+  the latest run's accounts with their enriched committee and an "Export N contacts
+  to Salesloft" button that calls `/api/export?run=<id>`, limited to that week.
+  Older weeks selectable.
+- **ZoomInfo dropped names from free recommendations in Oct 2026** (brief now starts
+  "This data describes the job position of a person: job_title: …"). `parseBrief()`
+  handles both formats; contacts can exist with an empty name until enrichment fills
+  it; the UI shows the title with "name arrives with email". The worker no longer skips
+  nameless recommendations (it would have enriched nobody).
 
 ## Phase 3 — Dashboard
 

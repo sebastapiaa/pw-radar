@@ -6,7 +6,8 @@ import { sizeBand } from "@/lib/queries";
 
 /**
  * The only export: Salesloft person-import CSV. One person per row, contacts
- * of companies that surfaced in the last 30 days and are not tagged out.
+ * of companies that surfaced in the last 30 days and are not tagged out, or,
+ * with ?run=<weekly run id>, only that Sunday run's shortlist.
  * Decrypted at export time, logged in export_log, rate limited.
  *
  * Column names follow Salesloft's person import (first_name, last_name,
@@ -31,10 +32,15 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Export rate limit reached. Try again in an hour.", { status: 429 });
   }
 
+  const runId = new URL(req.url).searchParams.get("run");
+  if (runId && !/^[0-9a-f-]{36}$/i.test(runId)) return new NextResponse("Bad run id", { status: 400 });
+
   const rows = await sql<Record<string, unknown>[]>`
     with best as (
       select distinct on (zi_company_id) zi_company_id, score, why_now
       from findings where created_at > now() - interval '30 days'
+        and (${runId ?? null}::uuid is null
+             or zi_company_id in (select zi_company_id from weekly_shortlist where run_id = ${runId ?? null}::uuid))
       order by zi_company_id, score desc
     )
     select k.zi_contact_id, k.full_name, k.title, k.email_enc, k.phone_enc,
@@ -94,13 +100,13 @@ export async function GET(req: NextRequest) {
 
   await sql`
     insert into export_log (actor, record_count, filter_json, included_pii)
-    values (${session.actor}, ${rows.length}, ${sql.json({ export: "salesloft", window_days: 30 })}, true)`;
+    values (${session.actor}, ${rows.length}, ${sql.json({ export: "salesloft", window_days: 30, run: runId })}, true)`;
 
   const stamp = new Date().toISOString().slice(0, 10);
   return new NextResponse(lines.join("\r\n") + "\r\n", {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="radar-salesloft-${stamp}.csv"`,
+      "content-disposition": `attachment; filename="radar-salesloft-${runId ? "week-" : ""}${stamp}.csv"`,
       "cache-control": "no-store",
     },
   });

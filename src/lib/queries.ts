@@ -638,6 +638,92 @@ export async function seededAccounts(limit = 8): Promise<CompanyRow[]> {
   }));
 }
 
+// ---------- weekly digest ----------
+
+export interface WeeklyRun {
+  runId: string;
+  startedAt: string;
+  status: string;
+  creditsSpent: number;
+  candidates: number;
+  shortlist: number;
+}
+
+export interface WeeklyShortlistRow {
+  rank: number;
+  companyId: string;
+  name: string;
+  domain: string | null;
+  employeeCount: number | null;
+  city: string | null;
+  score: number;
+  whyNow: string | null;
+  contactsPicked: number;
+  contactsEnriched: number;
+  gateStatus: string;
+  lastOutcome: string | null;
+  contacts: ContactRow[];
+}
+
+export async function weeklyRuns(limit = 8): Promise<WeeklyRun[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select r.run_id, r.started_at, r.status, r.credits_spent, r.companies_seen,
+           (select count(*)::int from weekly_shortlist w where w.run_id = r.run_id) as shortlist
+    from runs r where r.job = 'weekly' order by r.started_at desc limit ${limit}`;
+  return rows.map((r) => ({
+    runId: String(r.run_id),
+    startedAt: new Date(r.started_at as string).toISOString(),
+    status: String(r.status),
+    creditsSpent: Number(r.credits_spent ?? 0),
+    candidates: Number(r.companies_seen ?? 0),
+    shortlist: Number(r.shortlist ?? 0),
+  }));
+}
+
+export async function weeklyShortlist(runId: string): Promise<WeeklyShortlistRow[]> {
+  const sql = db();
+  const rows = await sql<Record<string, unknown>[]>`
+    select w.rank, w.zi_company_id, w.score, w.why_now, w.contacts_picked, w.contacts_enriched,
+           c.name, c.domain, c.employee_count, c.city, c.gate_status,
+           (select status from outcomes o where o.zi_company_id = w.zi_company_id order by noted_at desc limit 1) as last_outcome
+    from weekly_shortlist w join companies c using (zi_company_id)
+    where w.run_id = ${runId} order by w.rank`;
+  const out: WeeklyShortlistRow[] = [];
+  for (const r of rows) {
+    const contacts = (await contactsForCompany(String(r.zi_company_id))).filter((c) => c.enrichedAt);
+    out.push({
+      rank: Number(r.rank),
+      companyId: String(r.zi_company_id),
+      name: String(r.name),
+      domain: (r.domain as string) ?? null,
+      employeeCount: r.employee_count === null ? null : Number(r.employee_count),
+      city: (r.city as string) ?? null,
+      score: Number(r.score),
+      whyNow: (r.why_now as string) ?? null,
+      contactsPicked: Number(r.contacts_picked ?? 0),
+      contactsEnriched: Number(r.contacts_enriched ?? 0),
+      gateStatus: String(r.gate_status ?? "pending"),
+      lastOutcome: (r.last_outcome as string) ?? null,
+      contacts,
+    });
+  }
+  return out;
+}
+
+/** Week-over-week numbers for the digest header. */
+export async function weekDigestStats(): Promise<{ newThisWeek: number; flaggedAwaiting: number; contactsWithEmail: number; creditsMonth: number }> {
+  const sql = db();
+  const [r] = await sql<{ new_week: number; flagged: number; with_email: number; credits_month: number }[]>`
+    select
+      (select count(distinct f.zi_company_id)::int from findings f join companies c using (zi_company_id)
+        where f.created_at > now() - interval '7 days' and c.gate_status <> 'killed') as new_week,
+      (select count(*)::int from companies where gate_status = 'flagged') as flagged,
+      (select count(*)::int from contacts where email_enc is not null) as with_email,
+      (select coalesce(sum(credits_spent),0)::int from runs where started_at > date_trunc('month', now())) as credits_month`;
+  return { newThisWeek: r.new_week, flaggedAwaiting: r.flagged, contactsWithEmail: r.with_email, creditsMonth: r.credits_month };
+}
+
 export async function scopesList(): Promise<{ slug: string; name: string; description: string | null; topics: string[] }[]> {
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
