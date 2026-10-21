@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { FindingRow } from "@/lib/queries";
 import { ageLabel, fmtInt, sizeBand, warmth } from "@/lib/format";
 import CardBody from "./CardBody";
+import { SelectBox } from "./Selection";
 
 /**
  * One row of the ranked list. The accent colour is data: it warms with
@@ -18,6 +19,7 @@ export default function FindingCard({ finding: f, position }: { finding: Finding
   const href = `/accounts/${encodeURIComponent(f.companyId)}`;
   return (
     <li className="finding" style={{ ["--warmth" as string]: w }}>
+      <SelectBox id={f.companyId} disabled={f.source === "manual"} />
       <details open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary>
           <span className="pos">{position}</span>

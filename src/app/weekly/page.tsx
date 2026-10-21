@@ -27,16 +27,17 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
           <h1>
             {current ? (
               <>
-                Week of {current.startedAt.slice(0, 10)}: <span className="brand-red">{fmtInt(shortlist.length)}</span>{" "}
-                accounts ready to work.
+                {current.job === "outreach" ? "Outreach list" : "Week"} of {current.startedAt.slice(0, 10)}:{" "}
+                <span className="brand-red">{fmtInt(shortlist.length)}</span> accounts ready to work.
               </>
             ) : (
-              <>No Sunday run yet.</>
+              <>No lists yet.</>
             )}
           </h1>
           <p className="lede">
-            The Sunday job ranks the week, clears the gate, pulls the buying committee for the top accounts and pays
-            for their email and phone. This page is that result, with the export Salesloft needs.
+            Every Sunday the job ranks the week, clears the gate, pulls the buying committee for the top accounts and
+            pays for their email and phone. You can also build a list yourself by ticking companies on{" "}
+            <Link href="/findings">Findings</Link>. Either way, this page is the result, with the export Salesloft needs.
           </p>
         </header>
 
@@ -59,7 +60,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                   <select name="run" defaultValue={current.runId} aria-label="Week">
                     {runs.map((r) => (
                       <option key={r.runId} value={r.runId}>
-                        {r.startedAt.slice(0, 10)} · {r.shortlist} accounts
+                        {r.startedAt.slice(0, 10)} · {r.job === "outreach" ? "outreach" : "Sunday"} · {r.shortlist} accounts
                       </option>
                     ))}
                   </select>{" "}
@@ -83,8 +84,8 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
         {!current ? (
           <section className="panel">
             <p className="muted">
-              The weekly job has not run. It is scheduled for Sundays at 17:00 Pacific once the Railway service exists.
-              Until then, accounts and their people are on the <Link href="/findings">findings list</Link>.
+              No Sunday run and no outreach list yet. Tick companies on the <Link href="/findings">findings list</Link>{" "}
+              and press &ldquo;Get contacts &amp; build export&rdquo; to make one now.
             </p>
           </section>
         ) : shortlist.length === 0 ? (

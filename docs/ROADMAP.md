@@ -290,6 +290,14 @@ Apple HIG review (docs/DESIGN.md says after the build).
   seeded with people (245 rows, 0 credits) on 2026-09-17.
 - The dashboard now calls ZoomInfo server-side, so Vercel needs the `ZI_*` variables
   and `PII_ENCRYPTION_KEY` as well as the auth ones.
+- **Outreach lists (Seb's workflow, 2026-10-21):** tick companies on `/findings`; a
+  sticky bar shows "N companies selected · up to N×k credits" with k (1–5) people per
+  company; "Get contacts & build export" creates a run (job `outreach`, rows in
+  `weekly_shortlist`), the browser drives enrichment three companies per request so
+  Vercel never runs long, then shows "Export to Salesloft" scoped to that run and a
+  link to review it on `/weekly`. Guards: ZoomInfo-sourced, not gate-killed, max 60
+  companies, 450-credit monthly soft cap checked before anything is spent. Selection
+  persists in the browser only.
 - The Anthropic profile is now optional by design (Seb's question); the deterministic
   summary is the default and the model paragraph, if ever enabled, replaces it.
 

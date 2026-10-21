@@ -363,6 +363,53 @@ select {
   color: var(--muted);
 }
 
+/* outreach selection */
+.finding {
+  position: relative;
+}
+
+.select-box {
+  position: absolute;
+  left: -28px;
+  top: 18px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-red);
+  cursor: pointer;
+}
+
+.selection-bar {
+  position: sticky;
+  bottom: 16px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+}
+
+.selection-bar label.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .select-box {
+    position: static;
+    margin: 12px 8px 0 0;
+    float: left;
+  }
+}
+
 /* weekly digest */
 .digest-bar {
   display: flex;

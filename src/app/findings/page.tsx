@@ -1,5 +1,6 @@
 import Shell from "../components/Shell";
 import FindingCard from "../components/FindingCard";
+import { SelectionProvider, SelectionBar } from "../components/Selection";
 import { cachedRankedFindings } from "@/lib/queries";
 import { ordinal, fmtInt } from "@/lib/format";
 
@@ -17,18 +18,21 @@ export default async function FindingsPage() {
           <h1>{fmtInt(findings.length)} accounts, ranked.</h1>
           <p className="lede">
             Best score per company over the last 30 days. Warmer accent means fresher signal. Click a row to expand,
-            or the name to open the account.
+            the name to open the account, or tick the box to add it to an outreach list.
           </p>
         </header>
-        {findings.length === 0 ? (
-          <p className="empty">No new signals in the last 30 days.</p>
-        ) : (
-          <ol className="findings">
-            {findings.map((f, i) => (
-              <FindingCard key={f.companyId} finding={f} position={ordinal(i + 1, findings.length)} />
-            ))}
-          </ol>
-        )}
+        <SelectionProvider>
+          {findings.length === 0 ? (
+            <p className="empty">No new signals in the last 30 days.</p>
+          ) : (
+            <ol className="findings">
+              {findings.map((f, i) => (
+                <FindingCard key={f.companyId} finding={f} position={ordinal(i + 1, findings.length)} />
+              ))}
+            </ol>
+          )}
+          <SelectionBar />
+        </SelectionProvider>
         <p className="foot muted">Score = fit × strength × recency × stack. Components are shown on each card.</p>
       </main>
     </Shell>

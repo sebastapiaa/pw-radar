@@ -642,6 +642,7 @@ export async function seededAccounts(limit = 8): Promise<CompanyRow[]> {
 
 export interface WeeklyRun {
   runId: string;
+  job: "weekly" | "outreach";
   startedAt: string;
   status: string;
   creditsSpent: number;
@@ -665,14 +666,16 @@ export interface WeeklyShortlistRow {
   contacts: ContactRow[];
 }
 
-export async function weeklyRuns(limit = 8): Promise<WeeklyRun[]> {
+/** Sunday runs and on-demand outreach lists, newest first. */
+export async function weeklyRuns(limit = 12): Promise<WeeklyRun[]> {
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
-    select r.run_id, r.started_at, r.status, r.credits_spent, r.companies_seen,
+    select r.run_id, r.job, r.started_at, r.status, r.credits_spent, r.companies_seen,
            (select count(*)::int from weekly_shortlist w where w.run_id = r.run_id) as shortlist
-    from runs r where r.job = 'weekly' order by r.started_at desc limit ${limit}`;
+    from runs r where r.job in ('weekly', 'outreach') order by r.started_at desc limit ${limit}`;
   return rows.map((r) => ({
     runId: String(r.run_id),
+    job: (r.job === "outreach" ? "outreach" : "weekly") as "weekly" | "outreach",
     startedAt: new Date(r.started_at as string).toISOString(),
     status: String(r.status),
     creditsSpent: Number(r.credits_spent ?? 0),

@@ -167,6 +167,11 @@ with empty values.
   `docs/ARCHITECTURE.md` §Verification gate. Calibration dry run: `npm run gate:report`;
   the 2026-09-17 run (11 kills, all vendors/providers; 23 flags) is recorded in the
   roadmap and awaits Seb's review as acceptance step 5.
+- Outreach workflow (Seb, 2026-10-21): pick companies, not people. Tick accounts on
+  the findings list, choose people-per-company (default 5, the buying committee), get
+  their email and phone in one go, export that list to Salesloft. The Sunday job is
+  the same thing automated for the top 15. "All emails possible" was ruled out by
+  arithmetic (≈16,000 credits for the whole list against an 8,877 balance).
 - People (2026-09-17): every ZoomInfo-sourced account can pull its recommended people
   for free (names, titles, buying-committee tier); email and phone are a per-person
   paid click or the Sunday batch. Credits stay behind a click or the Sunday job.

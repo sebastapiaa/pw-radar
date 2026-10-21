@@ -224,6 +224,116 @@ export async function enrichOne(contactId: string): Promise<{ ok: boolean; messa
   }
 }
 
+// ---------- outreach list: Seb picks companies, we get the committee and export ----------
+
+const OUTREACH_MAX_COMPANIES = 60;
+const OUTREACH_MONTHLY_SOFT_CAP = 450;
+
+export interface OutreachStart {
+  ok: boolean;
+  runId?: string;
+  companies?: number;
+  ceiling?: number;
+  message: string;
+}
+
+/**
+ * Create an outreach run for the chosen companies. Records them in
+ * weekly_shortlist under a run with job 'outreach' so the Weekly page and the
+ * export treat it exactly like a Sunday run. Spends nothing yet.
+ */
+export async function startOutreach(companyIds: string[], perCompany: number): Promise<OutreachStart> {
+  const s = await requireSession();
+  const ids = [...new Set(companyIds.filter((id) => /^\d+$/.test(id)))].slice(0, OUTREACH_MAX_COMPANIES);
+  const n = Math.min(Math.max(1, Math.floor(perCompany) || 5), 5);
+  if (!ids.length) return { ok: false, message: "Select at least one ZoomInfo-sourced company." };
+  const sql = db();
+  const [{ spent }] = await sql<{ spent: number }[]>`
+    select coalesce(sum(credits_spent),0)::int as spent from runs where started_at > date_trunc('month', now())`;
+  const ceiling = ids.length * n;
+  if (spent + ceiling > OUTREACH_MONTHLY_SOFT_CAP) {
+    return { ok: false, message: `This could spend ${ceiling} credits; ${spent} already spent this month against a ${OUTREACH_MONTHLY_SOFT_CAP} soft cap. Pick fewer companies.` };
+  }
+  const rows = await sql<{ zi_company_id: string; score: number | null; why_now: string | null }[]>`
+    select c.zi_company_id,
+           (select max(score) from findings f where f.zi_company_id = c.zi_company_id and f.created_at > now() - interval '30 days') as score,
+           (select why_now from findings f where f.zi_company_id = c.zi_company_id order by created_at desc limit 1) as why_now
+    from companies c where c.zi_company_id = any(${ids}) and c.source = 'zoominfo' and c.gate_status <> 'killed'`;
+  if (!rows.length) return { ok: false, message: "None of the selected companies can be enriched (manual or excluded)." };
+  rows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const [{ run_id: runId }] = await sql<{ run_id: string }[]>`
+    insert into runs (job, error) values ('outreach', ${`actor=${s.actor} perCompany=${n}`}) returning run_id`;
+  for (const [i, r] of rows.entries()) {
+    await sql`
+      insert into weekly_shortlist (run_id, zi_company_id, rank, score, why_now)
+      values (${runId}, ${r.zi_company_id}, ${i + 1}, ${r.score ?? 0}, ${r.why_now})`;
+  }
+  return { ok: true, runId, companies: rows.length, ceiling: rows.length * n, message: `Run created for ${rows.length} companies.` };
+}
+
+export interface OutreachStep {
+  ok: boolean;
+  done: { companyId: string; picked: number; withEmail: number; credits: number; error?: string }[];
+  creditsSoFar: number;
+  message?: string;
+}
+
+/**
+ * Enrich the committee for a few companies of an outreach run. Called
+ * repeatedly from the browser with small batches so no request runs long.
+ * Credits are counted on the run as records returned (upper bound).
+ */
+export async function enrichOutreachBatch(runId: string, companyIds: string[], perCompany: number): Promise<OutreachStep> {
+  await requireSession();
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return { ok: false, done: [], creditsSoFar: 0, message: "Bad run id." };
+  const n = Math.min(Math.max(1, Math.floor(perCompany) || 5), 5);
+  const sql = db();
+  const [run] = await sql<{ credits_spent: number; status: string }[]>`select credits_spent, status from runs where run_id = ${runId} and job = 'outreach'`;
+  if (!run) return { ok: false, done: [], creditsSoFar: 0, message: "Unknown run." };
+  const members = new Set(
+    (await sql<{ zi_company_id: string }[]>`select zi_company_id from weekly_shortlist where run_id = ${runId}`).map((r) => r.zi_company_id)
+  );
+  const { storeRecommendations, selectCommittee, storeEnrichment, zoomInfoFromEnv } = await import("./enrich");
+  const client = zoomInfoFromEnv(false);
+  await client.discoverTools();
+  client.assertRoles(["recommendedContacts", "enrichContacts"]);
+
+  let credits = Number(run.credits_spent ?? 0);
+  const done: OutreachStep["done"] = [];
+  for (const companyId of companyIds.slice(0, 5)) {
+    if (!members.has(companyId)) continue;
+    try {
+      const { recs } = await storeRecommendations(client, companyId);
+      const picked = selectCommittee(recs, n);
+      await sql`update weekly_shortlist set contacts_picked = ${picked.length} where run_id = ${runId} and zi_company_id = ${companyId}`;
+      if (!picked.length) {
+        done.push({ companyId, picked: 0, withEmail: 0, credits: 0 });
+        continue;
+      }
+      const r = await storeEnrichment(client, companyId, picked.map((p) => p.contactId));
+      credits += r.records;
+      await sql`update weekly_shortlist set contacts_enriched = ${r.withEmail} where run_id = ${runId} and zi_company_id = ${companyId}`;
+      await sql`update runs set credits_spent = ${credits} where run_id = ${runId}`;
+      done.push({ companyId, picked: picked.length, withEmail: r.withEmail, credits: r.records });
+    } catch (err) {
+      done.push({ companyId, picked: 0, withEmail: 0, credits: 0, error: (err as Error).message.slice(0, 160) });
+    }
+  }
+  return { ok: true, done, creditsSoFar: credits };
+}
+
+export async function finishOutreach(runId: string): Promise<{ withEmail: number; credits: number }> {
+  await requireSession();
+  const sql = db();
+  await sql`update runs set finished_at = now(), status = 'ok' where run_id = ${runId} and job = 'outreach'`;
+  const [r] = await sql<{ with_email: number; credits: number }[]>`
+    select (select coalesce(sum(contacts_enriched),0)::int from weekly_shortlist where run_id = ${runId}) as with_email,
+           (select credits_spent from runs where run_id = ${runId}) as credits`;
+  revalidateTag("findings");
+  revalidateTag("home");
+  return { withEmail: r?.with_email ?? 0, credits: Number(r?.credits ?? 0) };
+}
+
 /**
  * Reveal one contact's email and phone. Logged in export_log with
  * included_pii = true so the audit trail covers on-screen reveals too.
