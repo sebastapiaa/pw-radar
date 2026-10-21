@@ -114,7 +114,7 @@ export function SelectionControls({ all, unflagged }: { all: string[]; unflagged
 type Phase =
   | { kind: "idle" }
   | { kind: "running"; runId: string; total: number; done: number; credits: number; withEmail: number; errors: string[] }
-  | { kind: "finished"; runId: string; withEmail: number; credits: number; errors: string[] }
+  | { kind: "finished"; runId: string; withEmail: number; credits: number; errors: string[]; exportName: string }
   | { kind: "error"; message: string };
 
 export function SelectionBar() {
@@ -156,7 +156,7 @@ export function SelectionBar() {
       setPhase({ kind: "running", runId, total, done, credits, withEmail, errors: [...errors] });
     }
     const fin = await finishOutreach(runId);
-    setPhase({ kind: "finished", runId, withEmail: fin.withEmail, credits: fin.credits, errors });
+    setPhase({ kind: "finished", runId, withEmail: fin.withEmail, credits: fin.credits, errors, exportName: fin.exportName });
     clear();
   };
 
@@ -201,9 +201,16 @@ export function SelectionBar() {
             Done: <b>{phase.withEmail}</b> contacts with email · {phase.credits} credits
             {phase.errors.length > 0 && <span className="error"> · {phase.errors.length} companies failed</span>}
           </span>
-          <a className="button small" href={`/api/export?run=${phase.runId}`}>
-            Export to Salesloft
-          </a>
+          <form method="get" action="/api/export" className="export-form compact">
+            <input type="hidden" name="run" value={phase.runId} />
+            <label className="inline">
+              <span className="muted small">name</span>
+              <input type="text" name="name" defaultValue={phase.exportName} pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,39}" size={12} />
+            </label>
+            <button type="submit" className="button small" disabled={phase.withEmail === 0}>
+              Export to Salesloft
+            </button>
+          </form>
           <a className="link small" href={`/weekly?run=${phase.runId}`}>
             Review the list
           </a>

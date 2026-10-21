@@ -2,7 +2,9 @@ import Link from "next/link";
 import Shell from "../components/Shell";
 import ContactRowView from "../components/ContactRow";
 import { weeklyRuns, weeklyShortlist, weekDigestStats } from "@/lib/queries";
+import { nextExportName } from "@/lib/exports";
 import { fmtInt, sizeBand } from "@/lib/format";
+import ExportForm from "../components/ExportForm";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function WeeklyPage({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
   const { run } = await searchParams;
-  const [runs, stats] = await Promise.all([weeklyRuns(8), weekDigestStats()]);
+  const [runs, stats, suggestedName] = await Promise.all([weeklyRuns(8), weekDigestStats(), nextExportName()]);
   const current = runs.find((r) => r.runId === run) ?? runs[0] ?? null;
   const shortlist = current ? await weeklyShortlist(current.runId) : [];
   const withEmail = shortlist.reduce((n, s) => n + s.contacts.length, 0);
@@ -69,14 +71,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                   </button>
                 </form>
               )}
-              <a
-                className={`button small${withEmail === 0 ? " disabled" : ""}`}
-                href={`/api/export?run=${current.runId}`}
-                aria-disabled={withEmail === 0}
-                title="Salesloft person-import CSV: this week's contacts with email"
-              >
-                Export {fmtInt(withEmail)} contacts to Salesloft
-              </a>
+              <ExportForm runId={current.runId} suggestedName={suggestedName} count={withEmail} compact />
             </span>
           </div>
         )}

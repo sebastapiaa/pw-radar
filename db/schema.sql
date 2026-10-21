@@ -134,6 +134,28 @@ create table export_log (
   included_pii    boolean not null default false
 );
 
+-- Named exports and the people in each (db/migrations/006). The name is also
+-- the Salesloft tag on every row of that CSV.
+create table exports (
+  id            serial primary key,
+  name          text not null unique,
+  actor         text not null,
+  run_id        uuid,
+  record_count  integer not null default 0,
+  note          text,
+  created_at    timestamptz not null default now()
+);
+
+create table export_items (
+  export_id     integer not null references exports(id) on delete cascade,
+  zi_contact_id text not null references contacts(zi_contact_id),
+  zi_company_id text not null references companies(zi_company_id),
+  primary key (export_id, zi_contact_id)
+);
+
+create index on export_items (zi_company_id);
+create index on export_items (zi_contact_id);
+
 -- Outcome tracking. Seb marks what he acted on; this is what makes
 -- signal-to-contacted analytics possible.
 create table outcomes (

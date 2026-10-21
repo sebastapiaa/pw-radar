@@ -152,7 +152,9 @@ with empty values.
 - Product concept: connected account and scope objects, with signal phrases highlighted
   in the profile. See `docs/CONTEXT.md` and `docs/DESIGN.md`.
 - Account state via notes and tags on accounts and contacts; tags drive suppression.
-- Export: Salesloft person-import CSV only. No generic CSV, no other formats.
+- Export: Salesloft person-import CSV only. No generic CSV, no other formats. Since
+  2026-10-21 every export is named (`pwradar001`…), tagged in the CSV, and tracked per
+  person; the Exports page is the history. Salesloft tag-column format unverified.
 - Profile descriptions: the model-generated paragraph (Anthropic API, `claude-haiku-4-5`,
   span-grounded, company-level data only) is built but **optional and off by default**
   as of 2026-09-17; Seb questioned whether it is needed. The account page shows a

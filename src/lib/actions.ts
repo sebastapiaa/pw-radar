@@ -333,16 +333,17 @@ export async function enrichOutreachBatch(runId: string, companyIds: string[], p
   return { ok: true, done, creditsSoFar: credits };
 }
 
-export async function finishOutreach(runId: string): Promise<{ withEmail: number; credits: number }> {
+export async function finishOutreach(runId: string): Promise<{ withEmail: number; credits: number; exportName: string }> {
   await requireSession();
   const sql = db();
   await sql`update runs set finished_at = now(), status = 'ok' where run_id = ${runId} and job = 'outreach'`;
   const [r] = await sql<{ with_email: number; credits: number }[]>`
     select (select coalesce(sum(contacts_enriched),0)::int from weekly_shortlist where run_id = ${runId}) as with_email,
            (select credits_spent from runs where run_id = ${runId}) as credits`;
+  const { nextExportName } = await import("./exports");
   revalidateTag("findings");
   revalidateTag("home");
-  return { withEmail: r?.with_email ?? 0, credits: Number(r?.credits ?? 0) };
+  return { withEmail: r?.with_email ?? 0, credits: Number(r?.credits ?? 0), exportName: await nextExportName() };
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 } from "@/lib/queries";
 import { addNote, setCompanyTags, setOutcome, findPeople, approveGate } from "@/lib/actions";
 import { gateDecisionsFor } from "@/lib/queries";
+import { exportsForCompany } from "@/lib/exports";
 import { buildSummary } from "@/lib/summary";
 import { ageLabel, fmtDate, fmtInt, warmth } from "@/lib/format";
 import { DEAD_REASONS, DEAD_LABELS } from "@/lib/taxonomy";
@@ -38,7 +39,7 @@ export default async function AccountPage({
   const company = await companyById(id);
   if (!company) notFound();
 
-  const [profile, history, outcomes, signals, contacts, notes, gate] = await Promise.all([
+  const [profile, history, outcomes, signals, contacts, notes, gate, exportsHere] = await Promise.all([
     profileFor(id),
     findingHistory(id),
     outcomesFor(id),
@@ -46,6 +47,7 @@ export default async function AccountPage({
     contactsForCompany(id),
     notesFor("company", id),
     gateDecisionsFor(id),
+    exportsForCompany(id),
   ]);
   const back = `/accounts/${encodeURIComponent(id)}`;
   const latest = history[0] ?? null;
@@ -85,6 +87,11 @@ export default async function AccountPage({
             {" · "}
             <span className="age">freshest signal {ageLabel(ageDays)}</span>
             {lastOutcome && <span className="pill">{lastOutcome.status}</span>}
+            {exportsHere.map((e) => (
+              <span key={e.name} className="pill" title={`${e.people} people exported ${e.createdAt}`}>
+                {e.name}
+              </span>
+            ))}
             {company.tags.map((t) => (
               <span key={t} className="pill">
                 {t}

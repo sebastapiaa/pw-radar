@@ -19,9 +19,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
           <Link href="/gate">Gate</Link>
           <Link href="/scopes">Scopes</Link>
           <Link href="/accounts/new">Add account</Link>
-          <a href="/api/export" title="Salesloft person-import CSV, shortlist contacts">
-            Export
-          </a>
+          <Link href="/exports">Exports</Link>
         </nav>
         <form method="post" action="/api/auth/logout" className="inline-form">
           <button type="submit" className="link muted" title={session?.email ?? session?.name}>

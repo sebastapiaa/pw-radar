@@ -162,6 +162,8 @@ export interface ContactRow {
   hasPhone: boolean;
   tags: string[];
   enrichedAt: string | null;
+  /** Export names this person went out in, newest first. */
+  exports: string[];
 }
 
 /**
@@ -177,6 +179,8 @@ export async function contactsForCompany(companyId: string): Promise<ContactRow[
     order by case tier when 'security' then 0 when 'it' then 1 when 'csuite' then 2 else 3 end,
              rec_rank nulls last, full_name`;
   const { decryptPII } = await import("./crypto");
+  const { exportNamesForContacts } = await import("./exports");
+  const exportedIn = await exportNamesForContacts(rows.map((r) => String(r.zi_contact_id)));
   return rows.map((r) => {
     let emailMasked: string | null = null;
     if (r.email_enc) {
@@ -198,6 +202,7 @@ export async function contactsForCompany(companyId: string): Promise<ContactRow[
       hasPhone: !!r.phone_enc,
       tags: (r.tags as string[]) ?? [],
       enrichedAt: r.enriched_at ? new Date(r.enriched_at as string).toISOString().slice(0, 10) : null,
+      exports: exportedIn.get(String(r.zi_contact_id)) ?? [],
     };
   });
 }

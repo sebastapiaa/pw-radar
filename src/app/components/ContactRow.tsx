@@ -35,6 +35,12 @@ export default function ContactRowView({ contact: c }: { contact: ContactRow; ba
         {label && c.title && <span className="muted"> · {c.title}</span>}
         {!label && <span className="muted small"> · name arrives with email</span>}
         {!c.title && label && c.seniority && <span className="muted"> · {c.seniority}</span>}
+        {c.exports.length > 0 && (
+          <span className="pill" title={`Exported in ${c.exports.join(", ")}`}>
+            {c.exports[0]}
+            {c.exports.length > 1 ? ` +${c.exports.length - 1}` : ""}
+          </span>
+        )}
         {tier && <span className="pill">{tier}</span>}
         {c.tags.length > 0 && <span className="muted"> · {c.tags.join(", ")}</span>}
       </span>
