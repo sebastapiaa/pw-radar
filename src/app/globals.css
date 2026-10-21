@@ -378,6 +378,14 @@ select {
   cursor: pointer;
 }
 
+.selection-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+
 .selection-bar {
   position: sticky;
   bottom: 16px;

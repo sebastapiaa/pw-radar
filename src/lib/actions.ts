@@ -244,23 +244,25 @@ export interface OutreachStart {
  */
 export async function startOutreach(companyIds: string[], perCompany: number): Promise<OutreachStart> {
   const s = await requireSession();
-  const ids = [...new Set(companyIds.filter((id) => /^\d+$/.test(id)))].slice(0, OUTREACH_MAX_COMPANIES);
+  const ids = [...new Set(companyIds.filter((id) => /^\d+$/.test(id)))];
   const n = Math.min(Math.max(1, Math.floor(perCompany) || 5), 5);
   if (!ids.length) return { ok: false, message: "Select at least one ZoomInfo-sourced company." };
   const sql = db();
-  const [{ spent }] = await sql<{ spent: number }[]>`
-    select coalesce(sum(credits_spent),0)::int as spent from runs where started_at > date_trunc('month', now())`;
-  const ceiling = ids.length * n;
-  if (spent + ceiling > OUTREACH_MONTHLY_SOFT_CAP) {
-    return { ok: false, message: `This could spend ${ceiling} credits; ${spent} already spent this month against a ${OUTREACH_MONTHLY_SOFT_CAP} soft cap. Pick fewer companies.` };
-  }
-  const rows = await sql<{ zi_company_id: string; score: number | null; why_now: string | null }[]>`
+  const all = await sql<{ zi_company_id: string; score: number | null; why_now: string | null }[]>`
     select c.zi_company_id,
            (select max(score) from findings f where f.zi_company_id = c.zi_company_id and f.created_at > now() - interval '30 days') as score,
            (select why_now from findings f where f.zi_company_id = c.zi_company_id order by created_at desc limit 1) as why_now
     from companies c where c.zi_company_id = any(${ids}) and c.source = 'zoominfo' and c.gate_status <> 'killed'`;
-  if (!rows.length) return { ok: false, message: "None of the selected companies can be enriched (manual or excluded)." };
-  rows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  if (!all.length) return { ok: false, message: "None of the selected companies can be enriched (manual or excluded)." };
+  // Over the cap: take the highest-scoring companies, not the first ticked.
+  all.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const rows = all.slice(0, OUTREACH_MAX_COMPANIES);
+  const [{ spent }] = await sql<{ spent: number }[]>`
+    select coalesce(sum(credits_spent),0)::int as spent from runs where started_at > date_trunc('month', now())`;
+  const ceiling = rows.length * n;
+  if (spent + ceiling > OUTREACH_MONTHLY_SOFT_CAP) {
+    return { ok: false, message: `This could spend ${ceiling} credits; ${spent} already spent this month against a ${OUTREACH_MONTHLY_SOFT_CAP} soft cap. Pick fewer companies.` };
+  }
   const [{ run_id: runId }] = await sql<{ run_id: string }[]>`
     insert into runs (job, error) values ('outreach', ${`actor=${s.actor} perCompany=${n}`}) returning run_id`;
   for (const [i, r] of rows.entries()) {
@@ -269,6 +271,15 @@ export async function startOutreach(companyIds: string[], perCompany: number): P
       values (${runId}, ${r.zi_company_id}, ${i + 1}, ${r.score ?? 0}, ${r.why_now})`;
   }
   return { ok: true, runId, companies: rows.length, ceiling: rows.length * n, message: `Run created for ${rows.length} companies.` };
+}
+
+/** Company ids in an outreach run, rank order. */
+export async function outreachMembers(runId: string): Promise<string[]> {
+  await requireSession();
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return [];
+  const rows = await db()<{ zi_company_id: string }[]>`
+    select zi_company_id from weekly_shortlist where run_id = ${runId} order by rank`;
+  return rows.map((r) => r.zi_company_id);
 }
 
 export interface OutreachStep {

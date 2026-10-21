@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { startOutreach, enrichOutreachBatch, finishOutreach } from "@/lib/actions";
+import { startOutreach, enrichOutreachBatch, finishOutreach, outreachMembers } from "@/lib/actions";
 
 /**
  * Outreach list: tick companies on the findings list, see the count and the
@@ -13,8 +13,12 @@ import { startOutreach, enrichOutreachBatch, finishOutreach } from "@/lib/action
 interface Ctx {
   selected: Set<string>;
   toggle: (id: string) => void;
+  selectMany: (ids: string[]) => void;
   clear: () => void;
 }
+
+/** A run enriches at most this many companies (top by score). Mirrors actions.ts. */
+export const OUTREACH_MAX_COMPANIES = 60;
 
 const SelectionContext = createContext<Ctx | null>(null);
 const KEY = "radar.outreach.selection";
@@ -55,7 +59,8 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clear = useCallback(() => persist(new Set()), []);
-  const value = useMemo(() => ({ selected, toggle, clear }), [selected, toggle, clear]);
+  const selectMany = useCallback((ids: string[]) => persist(new Set(ids)), []);
+  const value = useMemo(() => ({ selected, toggle, selectMany, clear }), [selected, toggle, selectMany, clear]);
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
 }
 
@@ -81,6 +86,31 @@ export function SelectBox({ id, disabled }: { id: string; disabled?: boolean }) 
   );
 }
 
+/**
+ * Bulk selection controls above the list. `all` and `unflagged` are the
+ * selectable company ids in list (score) order; manual accounts are excluded
+ * by the page before they get here.
+ */
+export function SelectionControls({ all, unflagged }: { all: string[]; unflagged: string[] }) {
+  const { selected, selectMany, clear } = useSelection();
+  return (
+    <div className="selection-controls">
+      <button type="button" className="button small ghost" onClick={() => selectMany(all)}>
+        Select all ({all.length})
+      </button>
+      <button type="button" className="button small ghost" onClick={() => selectMany(unflagged)}>
+        Select all unflagged ({unflagged.length})
+      </button>
+      {selected.size > 0 && (
+        <button type="button" className="link muted small" onClick={clear}>
+          Clear {selected.size}
+        </button>
+      )}
+      <span className="muted small">A run takes at most {OUTREACH_MAX_COMPANIES} companies, highest score first.</span>
+    </div>
+  );
+}
+
 type Phase =
   | { kind: "idle" }
   | { kind: "running"; runId: string; total: number; done: number; credits: number; withEmail: number; errors: string[] }
@@ -103,13 +133,16 @@ export function SelectionBar() {
     }
     const runId = start.runId;
     const total = start.companies ?? ids.length;
+    // The server may have capped the run to the top N by score; only those are members.
+    const members = await outreachMembers(runId);
+    const toRun = members.length ? members : ids;
     let done = 0;
     let credits = 0;
     let withEmail = 0;
     const errors: string[] = [];
     setPhase({ kind: "running", runId, total, done, credits, withEmail, errors });
-    for (let i = 0; i < ids.length; i += 3) {
-      const step = await enrichOutreachBatch(runId, ids.slice(i, i + 3), perCompany);
+    for (let i = 0; i < toRun.length; i += 3) {
+      const step = await enrichOutreachBatch(runId, toRun.slice(i, i + 3), perCompany);
       if (!step.ok) {
         errors.push(step.message ?? "batch failed");
         break;
@@ -132,7 +165,11 @@ export function SelectionBar() {
       {phase.kind === "idle" && (
         <>
           <span>
-            <b>{count}</b> {count === 1 ? "company" : "companies"} selected · up to <b>{count * perCompany}</b> credits
+            <b>{count}</b> {count === 1 ? "company" : "companies"} selected · up to{" "}
+            <b>{Math.min(count, OUTREACH_MAX_COMPANIES) * perCompany}</b> credits
+            {count > OUTREACH_MAX_COMPANIES && (
+              <span className="error"> · capped: the top {OUTREACH_MAX_COMPANIES} by score will run</span>
+            )}
           </span>
           <label className="inline">
             people per company

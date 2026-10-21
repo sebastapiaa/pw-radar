@@ -1,6 +1,6 @@
 import Shell from "../components/Shell";
 import FindingCard from "../components/FindingCard";
-import { SelectionProvider, SelectionBar } from "../components/Selection";
+import { SelectionProvider, SelectionBar, SelectionControls } from "../components/Selection";
 import { cachedRankedFindings } from "@/lib/queries";
 import { ordinal, fmtInt } from "@/lib/format";
 
@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 /** The full ranked list. One column, expand in place. docs/DESIGN.md §Layout. */
 export default async function FindingsPage() {
   const findings = await cachedRankedFindings(300);
+  const selectable = findings.filter((f) => f.source !== "manual");
+  const allIds = selectable.map((f) => f.companyId);
+  const unflaggedIds = selectable.filter((f) => f.gateStatus !== "flagged").map((f) => f.companyId);
 
   return (
     <Shell>
@@ -22,6 +25,7 @@ export default async function FindingsPage() {
           </p>
         </header>
         <SelectionProvider>
+          {findings.length > 0 && <SelectionControls all={allIds} unflagged={unflaggedIds} />}
           {findings.length === 0 ? (
             <p className="empty">No new signals in the last 30 days.</p>
           ) : (
