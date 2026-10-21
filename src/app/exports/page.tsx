@@ -29,8 +29,8 @@ export default async function ExportsPage() {
           <p className="eyebrow">NO.007 / exports</p>
           <h1>Everything that left, by name.</h1>
           <p className="lede">
-            Each export is tagged <code>pwradar</code> plus its own name in the Salesloft CSV, so you can filter all of
-            Radar&apos;s people or one batch. Accounts and people show which export they went out in.
+            Each export is tagged with its name in the Salesloft CSV, one tag per row, so you can filter one batch or
+            everything starting with <code>pwradar</code>. Accounts and people show which export they went out in.
           </p>
         </header>
 

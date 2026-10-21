@@ -98,13 +98,12 @@ the scoring and why-now context that path cannot.
 
 **Named exports (Seb, 2026-10-21).** Every export has a name, default the next in the
 `pwradar001`, `pwradar002`… sequence, editable before download. The CSV's `tags`
-column carries `pwradar,<name>` so Salesloft can filter everything Radar sent and each
-batch; `radar_export` repeats the name as a custom field. `exports` records name, actor,
+column carries exactly one tag, the export name (Seb: one tag only); the shared
+`pwradar` prefix is what filters everything Radar sent. `radar_export` repeats the
+name as a custom field. `exports` records name, actor,
 source run, count and note; `export_items` records every person in it. The Exports page
 lists history; account pages and people rows show the export names they left in. One
-name cannot be reused. `ASSUMPTION`: Salesloft's person import accepts a `tags` column
-with comma-separated values inside the cell; verify on the first import and adjust the
-separator if it wants semicolons.
+name cannot be reused.
 
 ## Verification gate (added 2026-09-17)
 

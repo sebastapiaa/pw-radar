@@ -298,8 +298,8 @@ Apple HIG review (docs/DESIGN.md says after the build).
   link to review it on `/weekly`. Guards: ZoomInfo-sourced, not gate-killed, max 60
   companies, 450-credit monthly soft cap checked before anything is spent. Selection
   persists in the browser only. "Select all" and "Select all unflagged" above the list.
-- **Named exports (2026-10-21):** `pwradar###` sequence, editable; `tags` column
-  `pwradar,<name>`; `exports` + `export_items` tables (migration 006); `/exports`
+- **Named exports (2026-10-21):** `pwradar###` sequence, editable; `tags` column is
+  the name alone (one tag per row, Seb's call); `exports` + `export_items` tables (migration 006); `/exports`
   history page; export names shown on accounts and people. See `docs/ARCHITECTURE.md`
   §Export.
 - The Anthropic profile is now optional by design (Seb's question); the deterministic

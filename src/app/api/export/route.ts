@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { decryptPII } from "@/lib/crypto";
 import { sizeBand } from "@/lib/format";
-import { EXPORT_TAG, EXPORT_NAME_RE, nextExportName } from "@/lib/exports";
+import { EXPORT_NAME_RE, nextExportName } from "@/lib/exports";
 
 /**
  * The only export: Salesloft person-import CSV. One person per row, contacts
@@ -12,8 +12,8 @@ import { EXPORT_TAG, EXPORT_NAME_RE, nextExportName } from "@/lib/exports";
  *
  * Every export is named (?name=, default next pwradar###), recorded in
  * `exports` with the people it contained in `export_items`, and logged in
- * export_log. The CSV `tags` column carries "pwradar" plus the export name,
- * so Salesloft can filter everything Radar ever sent and each batch.
+ * export_log. The CSV `tags` column carries exactly one tag, the export name
+ * (e.g. pwradar001); the shared "pwradar" prefix is what filters all of them.
  *
  * Column names follow Salesloft's person import (first_name, last_name,
  * email_address, title, company_name, phone, tags) plus custom fields with
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
         String(r.title ?? ""),
         String(r.company_name),
         phone,
-        `${EXPORT_TAG},${name}`,
+        name,
         name,
         String(r.why_now ?? ""),
         String(r.score),
