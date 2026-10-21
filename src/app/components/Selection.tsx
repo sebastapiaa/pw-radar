@@ -17,13 +17,13 @@ interface Ctx {
   clear: () => void;
 }
 
-/** A run enriches at most this many companies (top by score). Mirrors actions.ts. */
-export const OUTREACH_MAX_COMPANIES = 60;
+/** Per-run company cap, passed from the server (env RADAR_OUTREACH_MAX_COMPANIES). */
+const LimitContext = createContext<number>(300);
 
 const SelectionContext = createContext<Ctx | null>(null);
 const KEY = "radar.outreach.selection";
 
-export function SelectionProvider({ children }: { children: ReactNode }) {
+export function SelectionProvider({ children, maxCompanies = 300 }: { children: ReactNode; maxCompanies?: number }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -61,7 +61,11 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
   const clear = useCallback(() => persist(new Set()), []);
   const selectMany = useCallback((ids: string[]) => persist(new Set(ids)), []);
   const value = useMemo(() => ({ selected, toggle, selectMany, clear }), [selected, toggle, selectMany, clear]);
-  return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;
+  return (
+    <LimitContext.Provider value={maxCompanies}>
+      <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>
+    </LimitContext.Provider>
+  );
 }
 
 export function useSelection(): Ctx {
@@ -93,6 +97,7 @@ export function SelectBox({ id, disabled }: { id: string; disabled?: boolean }) 
  */
 export function SelectionControls({ all, unflagged }: { all: string[]; unflagged: string[] }) {
   const { selected, selectMany, clear } = useSelection();
+  const OUTREACH_MAX_COMPANIES = useContext(LimitContext);
   return (
     <div className="selection-controls">
       <button type="button" className="button small ghost" onClick={() => selectMany(all)}>
@@ -119,6 +124,7 @@ type Phase =
 
 export function SelectionBar() {
   const { selected, clear } = useSelection();
+  const OUTREACH_MAX_COMPANIES = useContext(LimitContext);
   const [perCompany, setPerCompany] = useState(5);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const count = selected.size;

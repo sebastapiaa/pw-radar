@@ -14,6 +14,7 @@ import { requireSession } from "./session";
 import { decryptPII } from "./crypto";
 
 import { DEAD_REASONS } from "./taxonomy";
+import { MONTHLY_SOFT_CAP, OUTREACH_MAX_COMPANIES } from "./limits";
 
 const OUTCOMES = new Set(["contacted", "replied", "meeting", "dead"]);
 const TAG_RE = /^[a-z0-9][a-z0-9:_.-]{0,39}$/;
@@ -177,8 +178,8 @@ export async function findPeople(formData: FormData) {
   revalidatePath(back);
 }
 
-/** Monthly credit cap mirrors the ZoomInfo per-user cap; leave headroom for the Sunday job. */
-const CLICK_CREDIT_SOFT_CAP = 400;
+/** Single clicks stop at the same soft cap as batch runs. */
+const CLICK_CREDIT_SOFT_CAP = MONTHLY_SOFT_CAP;
 
 /**
  * PAID. One credit (at most) for one person's email and direct dial. Counted
@@ -226,8 +227,7 @@ export async function enrichOne(contactId: string): Promise<{ ok: boolean; messa
 
 // ---------- outreach list: Seb picks companies, we get the committee and export ----------
 
-const OUTREACH_MAX_COMPANIES = 60;
-const OUTREACH_MONTHLY_SOFT_CAP = 450;
+const OUTREACH_MONTHLY_SOFT_CAP = MONTHLY_SOFT_CAP;
 
 export interface OutreachStart {
   ok: boolean;

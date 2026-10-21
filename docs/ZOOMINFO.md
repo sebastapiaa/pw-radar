@@ -34,7 +34,8 @@ Exactly three code paths call a paid tool, and each records its spend in `runs`:
 | Path | Job name in `runs` | Guard |
 |---|---|---|
 | Sunday worker `workers/weekly.ts` | `weekly` | `CREDIT_CEILING` 150 per run, checked before each batch |
-| Dashboard "Get email & phone" click | `enrich-click` | 1 contact per click, 400/month soft cap in `src/lib/actions.ts` |
+| Dashboard "Get email & phone" click | `enrich-click` | 1 contact per click, stops 50 short of `RADAR_MONTHLY_CREDIT_CAP` |
+| Dashboard outreach list (tick companies → get committee) | `outreach` | up to `RADAR_OUTREACH_MAX_COMPANIES` (300) companies × 1–5 people per run; refuses to start if the ceiling would pass the monthly cap minus 50 |
 | (none yet) research tools | — | AI action credits, not wired |
 
 The daily worker, "Find people", the findings list and the export never spend.
@@ -76,7 +77,7 @@ app) in Admin Portal → Users → User Management → edit user → Subscriptio
 | Setting | Value |
 |---|---|
 | Product | SalesOS: Advanced+ Bundle |
-| Credit Limit | Limit to 500, reset monthly (was 1,000) |
+| Credit Limit | Limit to 500, reset monthly (was 1,000). **Seb raised it to 1,500 on 2026-10-21** for outreach volume; dashboard guards follow via `RADAR_MONTHLY_CREDIT_CAP`. At full use that is ~6 months of the 8,877 balance. |
 | AI Action Credits | Limit to 200, reset monthly (was Unlimited) |
 
 500 is from the budget above: ~90/week planned, ~400/month at the discovery edge,

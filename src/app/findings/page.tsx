@@ -1,6 +1,7 @@
 import Shell from "../components/Shell";
 import FindingCard from "../components/FindingCard";
 import { SelectionProvider, SelectionBar, SelectionControls } from "../components/Selection";
+import { OUTREACH_MAX_COMPANIES } from "@/lib/limits";
 import { cachedRankedFindings } from "@/lib/queries";
 import { ordinal, fmtInt } from "@/lib/format";
 
@@ -24,7 +25,7 @@ export default async function FindingsPage() {
             the name to open the account, or tick the box to add it to an outreach list.
           </p>
         </header>
-        <SelectionProvider>
+        <SelectionProvider maxCompanies={OUTREACH_MAX_COMPANIES}>
           {findings.length > 0 && <SelectionControls all={allIds} unflagged={unflaggedIds} />}
           {findings.length === 0 ? (
             <p className="empty">No new signals in the last 30 days.</p>

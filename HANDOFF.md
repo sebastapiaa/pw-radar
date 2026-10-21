@@ -169,6 +169,10 @@ with empty values.
   `docs/ARCHITECTURE.md` §Verification gate. Calibration dry run: `npm run gate:report`;
   the 2026-09-17 run (11 kills, all vendors/providers; 23 flags) is recorded in the
   roadmap and awaits Seb's review as acceptance step 5.
+- Credit pace (Seb, 2026-10-21): monthly cap 1,500 (ZoomInfo portal, Seb's action) and
+  300 companies per outreach run. Dashboard guards read `RADAR_MONTHLY_CREDIT_CAP` and
+  `RADAR_OUTREACH_MAX_COMPANIES` (Vercel env; defaults 1500 / 300). The "~90 credits a
+  week" budget in `docs/ZOOMINFO.md` is superseded; runway at full use is ~6 months.
 - Outreach workflow (Seb, 2026-10-21): pick companies, not people. Tick accounts on
   the findings list, choose people-per-company (default 5, the buying committee), get
   their email and phone in one go, export that list to Salesloft. The Sunday job is
