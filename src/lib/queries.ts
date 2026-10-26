@@ -37,6 +37,7 @@ export interface FindingRow {
   noteCount: number;
   gateStatus: string;
   gateReason: string | null;
+  canEnrich: boolean;
 }
 
 /**
@@ -56,6 +57,12 @@ export async function rankedFindings(limit = 200): Promise<FindingRow[]> {
     select b.id as finding_id, b.zi_company_id, c.name, c.domain, c.employee_count, c.city, c.state,
            c.source, c.tags, c.gate_status, c.gate_reason, b.score, b.signal_count, b.icp_fit, b.signal_strength,
            b.recency_decay, b.stack_bonus, b.why_now,
+           (c.source = 'zoominfo' and c.gate_status in ('passed','approved')
+            and coalesce((select verdict = 'pass' from gate_decisions d
+              where d.zi_company_id = c.zi_company_id and d.check_name = 'corroboration'
+              order by d.created_at desc, d.id desc limit 1), false)
+            and coalesce((select status <> 'dead' from outcomes o where o.zi_company_id = c.zi_company_id
+              order by o.noted_at desc, o.id desc limit 1), true)) as can_enrich,
            (select max(signal_date) from signals s where s.zi_company_id = b.zi_company_id) as freshest,
            (select status from outcomes o where o.zi_company_id = b.zi_company_id
               order by noted_at desc limit 1) as last_outcome,
@@ -107,6 +114,7 @@ function toFindingRow(r: Record<string, unknown>): FindingRow {
     noteCount: Number(r.note_count ?? 0),
     gateStatus: String(r.gate_status ?? "pending"),
     gateReason: (r.gate_reason as string) ?? null,
+    canEnrich: r.can_enrich === true,
   };
 }
 
@@ -152,6 +160,7 @@ export async function signalsForCompany(companyId: string, limit = 40): Promise<
 
 export interface ContactRow {
   id: string;
+  companyId: string;
   fullName: string;
   title: string | null;
   seniority: string | null;
@@ -170,12 +179,18 @@ export interface ContactRow {
  * Masked by default. Plaintext only via revealContact() in actions.ts.
  * Order: buying-committee tiers first, then recommendation rank.
  */
-export async function contactsForCompany(companyId: string): Promise<ContactRow[]> {
+export async function contactsForCompany(companyId: string | null, runId: string | null = null): Promise<ContactRow[]> {
+  if (!companyId && !runId) throw new Error('A company or saved contact list is required.');
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
-    select zi_contact_id, full_name, title, seniority, department, tier, rec_rank,
-           email_enc, phone_enc, tags, enriched_at
-    from contacts where zi_company_id = ${companyId}
+    select zi_contact_id, zi_company_id, full_name, title, seniority, department, tier, rec_rank,
+           case when purge_after > now() then email_enc else null end as email_enc,
+           case when purge_after > now() then phone_enc else null end as phone_enc,
+           tags, case when purge_after > now() then enriched_at else null end as enriched_at
+    from contacts where (${companyId}::text is null or zi_company_id = ${companyId})
+      and (${runId}::uuid is null or exists (select 1 from shortlist_contacts p
+        where p.run_id = ${runId}::uuid and p.zi_contact_id = contacts.zi_contact_id
+          and p.zi_company_id = contacts.zi_company_id))
     order by case tier when 'security' then 0 when 'it' then 1 when 'csuite' then 2 else 3 end,
              rec_rank nulls last, full_name`;
   const { decryptPII } = await import("./crypto");
@@ -192,6 +207,7 @@ export async function contactsForCompany(companyId: string): Promise<ContactRow[
     }
     return {
       id: String(r.zi_contact_id),
+      companyId: String(r.zi_company_id),
       fullName: String(r.full_name),
       title: (r.title as string) ?? null,
       seniority: (r.seniority as string) ?? null,
@@ -653,6 +669,8 @@ export interface WeeklyRun {
   creditsSpent: number;
   candidates: number;
   shortlist: number;
+  actor: string | null;
+  listVersion: number;
 }
 
 export interface WeeklyShortlistRow {
@@ -669,15 +687,20 @@ export interface WeeklyShortlistRow {
   gateStatus: string;
   lastOutcome: string | null;
   contacts: ContactRow[];
+  contactStatus: string;
+  contactError: string | null;
 }
 
 /** Sunday runs and on-demand outreach lists, newest first. */
-export async function weeklyRuns(limit = 12): Promise<WeeklyRun[]> {
+export async function weeklyRuns(limit = 12, selectedRunId: string | null = null): Promise<WeeklyRun[]> {
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
-    select r.run_id, r.job, r.started_at, r.status, r.credits_spent, r.companies_seen,
+    select r.run_id, r.job, r.started_at, r.status, r.credits_spent, r.companies_seen, r.actor, r.contact_list_version,
            (select count(*)::int from weekly_shortlist w where w.run_id = r.run_id) as shortlist
-    from runs r where r.job in ('weekly', 'outreach') order by r.started_at desc limit ${limit}`;
+    from runs r where r.job in ('weekly', 'outreach')
+      and (r.run_id = ${selectedRunId}::uuid or r.run_id in (
+        select run_id from runs where job in ('weekly','outreach') order by started_at desc limit ${limit}))
+    order by r.started_at desc`;
   return rows.map((r) => ({
     runId: String(r.run_id),
     job: (r.job === "outreach" ? "outreach" : "weekly") as "weekly" | "outreach",
@@ -686,20 +709,30 @@ export async function weeklyRuns(limit = 12): Promise<WeeklyRun[]> {
     creditsSpent: Number(r.credits_spent ?? 0),
     candidates: Number(r.companies_seen ?? 0),
     shortlist: Number(r.shortlist ?? 0),
+    actor: (r.actor as string) ?? null,
+    listVersion: Number(r.contact_list_version),
   }));
 }
 
 export async function weeklyShortlist(runId: string): Promise<WeeklyShortlistRow[]> {
   const sql = db();
   const rows = await sql<Record<string, unknown>[]>`
-    select w.rank, w.zi_company_id, w.score, w.why_now, w.contacts_picked, w.contacts_enriched,
+    select w.rank, w.zi_company_id, w.score, w.why_now, w.contacts_picked, w.contacts_enriched, w.contact_status, w.contact_error,
            c.name, c.domain, c.employee_count, c.city, c.gate_status,
            (select status from outcomes o where o.zi_company_id = w.zi_company_id order by noted_at desc limit 1) as last_outcome
     from weekly_shortlist w join companies c using (zi_company_id)
     where w.run_id = ${runId} order by w.rank`;
   const out: WeeklyShortlistRow[] = [];
+  // One batched people query plus one export-history query for the entire list.
+  const people = await contactsForCompany(null, runId);
+  const peopleByCompany = new Map<string, ContactRow[]>();
+  for (const person of people) {
+    const group = peopleByCompany.get(person.companyId) ?? [];
+    group.push(person);
+    peopleByCompany.set(person.companyId, group);
+  }
   for (const r of rows) {
-    const contacts = (await contactsForCompany(String(r.zi_company_id))).filter((c) => c.enrichedAt);
+    const contacts = peopleByCompany.get(String(r.zi_company_id)) ?? [];
     out.push({
       rank: Number(r.rank),
       companyId: String(r.zi_company_id),
@@ -714,6 +747,8 @@ export async function weeklyShortlist(runId: string): Promise<WeeklyShortlistRow
       gateStatus: String(r.gate_status ?? "pending"),
       lastOutcome: (r.last_outcome as string) ?? null,
       contacts,
+      contactStatus: String(r.contact_status),
+      contactError: (r.contact_error as string) ?? null,
     });
   }
   return out;

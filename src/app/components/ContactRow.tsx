@@ -18,7 +18,7 @@ const TIER_LABEL: Record<string, string> = {
  *   enriched, masked  → masked email, "reveal" (logged)
  *   revealed          → plaintext for this page's lifetime only
  */
-export default function ContactRowView({ contact: c }: { contact: ContactRow; back: string }) {
+export default function ContactRowView({ contact: c, allowEnrich = true, exportReady }: { contact: ContactRow; back: string; allowEnrich?: boolean; exportReady?: boolean }) {
   const router = useRouter();
   const [revealed, setRevealed] = useState<{ email: string | null; phone: string | null } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -42,6 +42,7 @@ export default function ContactRowView({ contact: c }: { contact: ContactRow; ba
           </span>
         )}
         {tier && <span className="pill">{tier}</span>}
+        {exportReady !== undefined && <span className="pill">{exportReady ? 'ready to export' : 'not exportable'}</span>}
         {c.tags.length > 0 && <span className="muted"> · {c.tags.join(", ")}</span>}
       </span>
       <span className="reach">
@@ -64,7 +65,7 @@ export default function ContactRowView({ contact: c }: { contact: ContactRow; ba
               {pending ? "revealing…" : "reveal"}
             </button>
           </>
-        ) : (
+        ) : !allowEnrich ? <span className="muted">No usable email on file</span> : (
           <>
             {msg && <span className="muted small">{msg} </span>}
             <button

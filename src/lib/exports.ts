@@ -12,9 +12,9 @@ export const EXPORT_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,39}$/i;
 export async function nextExportName(): Promise<string> {
   const sql = db();
   const [r] = await sql<{ n: number }[]>`
-    select coalesce(max(substring(name from '^pwradar(\\d+)$')::int), 0)::int as n
-    from exports where name ~ '^pwradar\\d+$'`;
-  return `${EXPORT_TAG}${String((r?.n ?? 0) + 1).padStart(3, "0")}`;
+    select coalesce(max(substring(name from '^pwradar([0-9]+)$')::bigint), 0)::bigint as n
+    from exports where name ~ '^pwradar[0-9]+$'`;
+  return `${EXPORT_TAG}${String(Number(r?.n ?? 0) + 1).padStart(3, "0")}`;
 }
 
 export interface ExportRow {

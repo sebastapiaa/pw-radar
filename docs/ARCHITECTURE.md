@@ -82,6 +82,16 @@ signals say the company needs to what PerimeterWatch offers.
 
 ## Export: Salesloft format, nothing else
 
+**Contact-list correction (2026-10-26).** `shortlist_contacts` (migration 007) stores
+the exact selected person IDs for each company/run before paid work starts. The
+review page and export use those IDs and the run's saved `weekly_shortlist.score`
+and `why_now`; the 30-day findings filter applies only to the general export.
+Preview counts and downloads share `src/lib/contact-export.ts` eligibility rules.
+Old runs have `contact_list_version = 0` and cannot claim exact membership; rebuild
+them from Findings. New user-built and weekly lists use version 1. No contact PII
+is copied into the membership table; expiry and current exclusions still apply.
+See `docs/CONTACT_LISTS.md` for continuation, credit and deployment behavior.
+
 The only export is a CSV shaped for Salesloft's person import. No generic CSV, no other
 formats. One person per row, shortlist contacts only, decrypted at export time, logged
 in `export_log`.

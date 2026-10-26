@@ -10,9 +10,8 @@ export const dynamic = "force-dynamic";
 /** The full ranked list. One column, expand in place. docs/DESIGN.md §Layout. */
 export default async function FindingsPage() {
   const findings = await cachedRankedFindings(300);
-  const selectable = findings.filter((f) => f.source !== "manual");
+  const selectable = findings.filter((f) => f.canEnrich);
   const allIds = selectable.map((f) => f.companyId);
-  const unflaggedIds = selectable.filter((f) => f.gateStatus !== "flagged").map((f) => f.companyId);
 
   return (
     <Shell>
@@ -23,10 +22,11 @@ export default async function FindingsPage() {
           <p className="lede">
             Best score per company over the last 30 days. Warmer accent means fresher signal. Click a row to expand,
             the name to open the account, or tick the box to add it to an outreach list.
+            Contact selection is available for gate-cleared accounts with corroborating signals.
           </p>
         </header>
         <SelectionProvider maxCompanies={OUTREACH_MAX_COMPANIES}>
-          {findings.length > 0 && <SelectionControls all={allIds} unflagged={unflaggedIds} />}
+          {findings.length > 0 && <SelectionControls all={allIds} />}
           {findings.length === 0 ? (
             <p className="empty">No new signals in the last 30 days.</p>
           ) : (

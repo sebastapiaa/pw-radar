@@ -46,6 +46,18 @@ catalog.
 
 ## Current state
 
+**Priority update, 2026-10-26 (secondary Codex session, Seb's explicit instruction).**
+The immediate deliverable is the right contacts directly on the platform: choose
+eligible companies on Findings, build their buying committee, review the saved
+Contact lists page (`/weekly`), then export exactly those people to Salesloft.
+Weekly automation and the rest of the audit are secondary until this works for Seb.
+The local changes in this session are described in `docs/CONTACT_LISTS.md`; they
+require migration `007_contact_lists.sql` before app/worker deployment. No migration
+has been applied to the live database, no paid ZoomInfo call has been made, and no
+deployment/push has been performed by this session. Do not treat local validation as
+production acceptance. Local verification: 36/36 tests, typecheck and production
+build passed; details and final rollout status are recorded in that document.
+
 **As of 2026-10-19.** Deployed and running: the daily worker (Railway cron
 `radar-daily`, 06:00 PT) has run every day since 2026-09-17 with zero failures and
 zero credits (33 runs; 1,100 findings; six weekly intent batches seen). The dashboard
@@ -58,7 +70,9 @@ surfaces (deterministic checks on Railway; the model review additionally whereve
 8,878 minus one enrichment click; daily loop spent 0). **Current phase: Phase 2**, the
 Sunday worker: written, shortlist persisted for the `/weekly` digest, enrichment parser
 proven on one real paid call (2026-10-19), but the `radar-weekly` Railway service does
-not exist yet. Creating it is the next step; recipe in `docs/ARCHITECTURE.md` §Stack.
+not exist yet. Its creation is deferred behind the contact-list priority above;
+recipe in `docs/ARCHITECTURE.md` §Stack. This deployment status is the last recorded
+state, not a live hosting check from the 2026-10-26 session.
 
 Known ZoomInfo drift: the paid `enrich_contacts` shape is `{contact_N…, totalEnriched,
 totalErrors}`; free recommendations no longer carry names (since Oct 2026). Both handled.
@@ -86,6 +100,9 @@ with empty values.
 
 ## Order of work
 
+**Current override:** complete the contact-list rollout and acceptance in
+`docs/CONTACT_LISTS.md` first. The historical phase order below resumes afterward.
+
 1. ~~Verify ZoomInfo MCP tool names against the live server.~~ Done 2026-09-17; rerun
    `npm run zi:discover` at the start of any session that touches the client.
 2. ~~Register an app for machine credentials.~~ Done 2026-09-17 (MCP app, Client
@@ -109,6 +126,17 @@ with empty values.
   `lookup` returns 24 scoop types; a real search in Phase 1 is the final proof.
 
 ## Answered (2026-09)
+
+- Contact-list priority (Seb, 2026-10-26): optimize for a usable list on the platform
+  now; defer weekly-service setup and unrelated audit fixes. Secondary-session code
+  adds exact per-run membership, tighter leadership selection, exclusion/gate checks,
+  cached-contact reuse, saved processing progress, safe continuation, per-call monthly
+  credit checks and accurate preview/export eligibility. It also clears stale DNC
+  numbers, fails exports explicitly on decryption errors, and synchronizes the fresh
+  schema snapshot so new installs include the required gate/list objects. Details,
+  remaining security issues and main-session deployment steps: `docs/CONTACT_LISTS.md`.
+- Free ZoomInfo discovery rerun 2026-10-26: 24 live tools; all existing worker roles
+  still resolve. No paid discovery/enrichment test was performed.
 
 - Intent is visible through free search. Verified 2026-09-17 against the live server:
   `search_intent` and `search_scoops` both declare themselves free in their tool

@@ -22,6 +22,11 @@ function key(): Buffer {
   return k;
 }
 
+/** Fail before a paid API call if contact data cannot be stored safely. */
+export function assertPIIKey(): void {
+  key();
+}
+
 /** Layout: [12B iv][16B auth tag][ciphertext] */
 export function encryptPII(plaintext: string): Buffer {
   const iv = randomBytes(12);

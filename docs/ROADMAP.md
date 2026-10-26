@@ -1,8 +1,31 @@
 # Roadmap: From Scaffold to Running System
 
 This file defines the target architecture and the order to build it. `HANDOFF.md` says
-what exists; this says what "done" means, in phases, each with an acceptance test. Do not
-start a phase before the previous one passes.
+what exists; this says what "done" means, in phases, each with an acceptance test.
+Follow the explicit priority override below before resuming the historical sequence.
+
+## Current priority — Contact lists (Seb, 2026-10-26)
+
+Seb asked in a secondary Codex session to prioritize a usable list of the right
+contacts directly on the platform, then fix the remaining audit issues. Deliver
+Findings selection → saved buying committee → Contact lists review (`/weekly`) →
+Salesloft CSV. Do not wait for Sunday-worker hosting or analytics to ship this path.
+Implementation and main-session rollout instructions are in `docs/CONTACT_LISTS.md`.
+Update both HANDOFF.md and CLAUDE.md when handing changes back. This override does
+not accept Phase 2 or authorize autonomous paid runs; enrichment stays behind Seb's
+click or the separately configured weekly service.
+
+**Accept when:** after applying migration 007 and deploying, Seb builds a small list
+from eligible accounts, reviews the exact selected people on the platform, and
+downloads a CSV containing the same exportable people and one export-name tag.
+Verify exclusions, repeat processing, partial failures and credit limits. Confirm
+Salesloft tags/custom fields in Seb's instance before relying on import mapping.
+
+**Local implementation:** exact contact IDs and saved company context, leadership
+filtering, cached-data reuse, progress/continuation, fail-explicit export, shared
+credit checks before paid calls, and DNC overwrite handling. Older unsnapshotted
+lists remain history and must be rebuilt rather than guessing their membership.
+Broader security/dependency work remains open; see the handoff checklist.
 
 ## Target architecture (v1, the running thing)
 

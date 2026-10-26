@@ -19,7 +19,7 @@ export default function FindingCard({ finding: f, position }: { finding: Finding
   const href = `/accounts/${encodeURIComponent(f.companyId)}`;
   return (
     <li className="finding" style={{ ["--warmth" as string]: w }}>
-      <SelectBox id={f.companyId} disabled={f.source === "manual"} />
+      <SelectBox id={f.companyId} disabled={!f.canEnrich} />
       <details open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary>
           <span className="pos">{position}</span>

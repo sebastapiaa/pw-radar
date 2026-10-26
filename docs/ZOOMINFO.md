@@ -29,13 +29,16 @@ only if this number is still 8,878 after three daily runs.
 
 ### Where credits can be spent (2026-09-17)
 
-Exactly three code paths call a paid tool, and each records its spend in `runs`:
+Exactly three code paths call a paid tool. Since the contact-list correction on
+2026-10-26, each records the requested-record upper bound in `runs` **before** the
+paid request, including failed/ambiguous requests. RUM can make actual spend lower;
+reconcile against the portal rather than treating this counter as an exact balance.
 
 | Path | Job name in `runs` | Guard |
 |---|---|---|
-| Sunday worker `workers/weekly.ts` | `weekly` | `CREDIT_CEILING` 150 per run, checked before each batch |
+| Sunday worker `workers/weekly.ts` | `weekly` | `CREDIT_CEILING` 150 per run plus shared monthly soft cap, checked before each paid batch |
 | Dashboard "Get email & phone" click | `enrich-click` | 1 contact per click, stops 50 short of `RADAR_MONTHLY_CREDIT_CAP` |
-| Dashboard outreach list (tick companies → get committee) | `outreach` | up to `RADAR_OUTREACH_MAX_COMPANIES` (300) companies × 1–5 people per run; refuses to start if the ceiling would pass the monthly cap minus 50 |
+| Dashboard contact list (tick companies → get committee) | `outreach` | up to `RADAR_OUTREACH_MAX_COMPANIES` (300) companies × 1–5 people per run; shared monthly cap minus 50 checked before every paid batch; cached emails are reused free |
 | (none yet) research tools | — | AI action credits, not wired |
 
 The daily worker, "Find people", the findings list and the export never spend.

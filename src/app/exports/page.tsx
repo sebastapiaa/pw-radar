@@ -2,7 +2,7 @@ import Link from "next/link";
 import Shell from "../components/Shell";
 import ExportForm from "../components/ExportForm";
 import { exportsList, nextExportName } from "@/lib/exports";
-import { db } from "@/lib/db";
+import { exportContacts } from "@/lib/contact-export";
 import { fmtInt } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -13,14 +13,12 @@ export const dynamic = "force-dynamic";
  * for when a list was not built first.
  */
 export default async function ExportsPage() {
-  const [exports, suggested, [{ n: available }]] = await Promise.all([
+  const [exports, suggested, contacts] = await Promise.all([
     exportsList(100),
     nextExportName(),
-    db()<{ n: number }[]>`
-      select count(*)::int as n from contacts k join companies c using (zi_company_id)
-      where k.email_enc is not null and c.gate_status <> 'killed'
-        and exists (select 1 from findings f where f.zi_company_id = c.zi_company_id and f.created_at > now() - interval '30 days')`,
+    exportContacts(),
   ]);
+  const available = contacts.length;
 
   return (
     <Shell>
@@ -42,7 +40,7 @@ export default async function ExportsPage() {
           <ExportForm suggestedName={suggested} count={available} />
           <p className="muted small">
             For a chosen set, tick companies on <Link href="/findings">Findings</Link> or use a list on{" "}
-            <Link href="/weekly">Weekly</Link>; those exports are scoped to that list.
+            <Link href="/weekly">Contact lists</Link>; those exports contain only the selected people.
           </p>
         </section>
 

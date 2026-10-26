@@ -5,6 +5,12 @@ import { weeklyRuns, weeklyShortlist, weekDigestStats } from "@/lib/queries";
 import { nextExportName } from "@/lib/exports";
 import { fmtInt, sizeBand } from "@/lib/format";
 import ExportForm from "../components/ExportForm";
+import ListProgress from "../components/ListProgress";
+import { exportContacts } from "@/lib/contact-export";
+import { MONTHLY_CREDIT_CAP } from "@/lib/limits";
+import { UUID_RE } from "@/lib/contact-lists";
+import { requireSession } from "@/lib/session";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -15,46 +21,51 @@ export const dynamic = "force-dynamic";
  */
 export default async function WeeklyPage({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
   const { run } = await searchParams;
-  const [runs, stats, suggestedName] = await Promise.all([weeklyRuns(8), weekDigestStats(), nextExportName()]);
-  const current = runs.find((r) => r.runId === run) ?? runs[0] ?? null;
+  if (run && !UUID_RE.test(run)) notFound();
+  const session = await requireSession();
+  const [runs, stats, suggestedName] = await Promise.all([weeklyRuns(12, run ?? null), weekDigestStats(), nextExportName()]);
+  const current = run ? runs.find((r) => r.runId === run) ?? null : runs[0] ?? null;
+  if (run && !current) notFound();
   const shortlist = current ? await weeklyShortlist(current.runId) : [];
-  const withEmail = shortlist.reduce((n, s) => n + s.contacts.length, 0);
+  const ready = current?.listVersion === 1 ? await exportContacts(current.runId) : [];
+  const withEmail = ready.length;
+  const readyIds = new Set(ready.map((c) => c.zi_contact_id));
+  const remaining = shortlist.filter((s) => ['pending','failed','processing'].includes(s.contactStatus)).length;
   const back = current ? `/weekly?run=${current.runId}` : "/weekly";
 
   return (
     <Shell>
       <main>
         <header className="page-head">
-          <p className="eyebrow">NO.006 / weekly digest</p>
+          <p className="eyebrow">NO.006 / contact lists</p>
           <h1>
             {current ? (
               <>
-                {current.job === "outreach" ? "Outreach list" : "Week"} of {current.startedAt.slice(0, 10)}:{" "}
-                <span className="brand-red">{fmtInt(shortlist.length)}</span> accounts ready to work.
+                <span className="brand-red">{fmtInt(withEmail)}</span> contacts ready to export.
               </>
             ) : (
               <>No lists yet.</>
             )}
           </h1>
           <p className="lede">
-            Every Sunday the job ranks the week, clears the gate, pulls the buying committee for the top accounts and
-            pays for their email and phone. You can also build a list yourself by ticking companies on{" "}
-            <Link href="/findings">Findings</Link>. Either way, this page is the result, with the export Salesloft needs.
+            Review IT leaders, security leaders and relevant executives from the accounts you chose.
+            Build a list by selecting eligible companies on <Link href="/findings">Findings</Link>.
+            Each list keeps its selected people and can be exported to Salesloft.
           </p>
         </header>
 
         <section className="tiles">
           <Tile label="New this week" value={fmtInt(stats.newThisWeek)} hint="accounts surfaced, gate-cleared" />
-          <Tile label="Contacts with email" value={fmtInt(withEmail)} hint={current ? "in this week's shortlist" : ""} />
-          <Tile label="Credits this month" value={fmtInt(stats.creditsMonth)} hint="of 500 cap" />
+          <Tile label="Contacts with email" value={fmtInt(withEmail)} hint={current ? "eligible people in this saved list" : ""} />
+          <Tile label="Credit upper bound this month" value={fmtInt(stats.creditsMonth)} hint={`of ${fmtInt(MONTHLY_CREDIT_CAP)} cap`} />
           <Tile label="Awaiting approval" value={fmtInt(stats.flaggedAwaiting)} hint="flagged on the gate" href="/gate" />
         </section>
 
         {current && (
           <div className="digest-bar">
             <span className="muted small">
-              run {current.startedAt.slice(0, 16).replace("T", " ")} UTC · {current.status} · {fmtInt(current.candidates)}{" "}
-              candidates · {fmtInt(current.creditsSpent)} credits
+              {current.startedAt.slice(0, 16).replace("T", " ")} UTC · {current.status} · {fmtInt(shortlist.length)}{" "}
+              accounts · up to {fmtInt(current.creditsSpent)} credits
             </span>
             <span className="row">
               {runs.length > 1 && (
@@ -62,7 +73,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                   <select name="run" defaultValue={current.runId} aria-label="Week">
                     {runs.map((r) => (
                       <option key={r.runId} value={r.runId}>
-                        {r.startedAt.slice(0, 10)} · {r.job === "outreach" ? "outreach" : "Sunday"} · {r.shortlist} accounts
+                        {r.startedAt.slice(0, 16).replace('T', ' ')} · {r.job === "outreach" ? "chosen accounts" : "Sunday"} · {r.status} · {r.shortlist} accounts
                       </option>
                     ))}
                   </select>{" "}
@@ -76,11 +87,16 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
           </div>
         )}
 
+        {current?.listVersion === 0 && <p className="panel muted">This older list has no saved contact selection. Create a new list from <Link href="/findings">Findings</Link> to review and export the exact people selected.</p>}
+        {current?.job === 'outreach' && current.listVersion === 1 && current.actor === session.actor && remaining > 0 && (
+          <ListProgress runId={current.runId} remaining={remaining} />
+        )}
+
         {!current ? (
           <section className="panel">
             <p className="muted">
               No Sunday run and no outreach list yet. Tick companies on the <Link href="/findings">findings list</Link>{" "}
-              and press &ldquo;Get contacts &amp; build export&rdquo; to make one now.
+              and press &ldquo;Build contact list&rdquo; to make one now.
             </p>
           </section>
         ) : shortlist.length === 0 ? (
@@ -106,14 +122,16 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                   <span className="score">{s.score}</span>
                 </header>
                 {s.whyNow && <p className="why">{s.whyNow}</p>}
+                <p className="muted small">{s.contactStatus} · {s.contactsPicked} selected · {s.contacts.filter((c) => readyIds.has(c.id)).length} ready to export</p>
+                {s.contactError && <p className="error small">{s.contactError}</p>}
                 {s.contacts.length === 0 ? (
                   <p className="muted small">
-                    {s.contactsPicked} picked, none enriched with an email. Open the account to retry people.
+                    {s.contactStatus === 'complete' ? 'No eligible buying committee was found in the recommendations.' : 'No contacts have been selected for this account yet.'}
                   </p>
                 ) : (
                   <ul className="contacts">
                     {s.contacts.map((c) => (
-                      <ContactRowView key={c.id} contact={c} back={back} />
+                      <ContactRowView key={c.id} contact={c} back={back} allowEnrich={false} exportReady={readyIds.has(c.id)} />
                     ))}
                   </ul>
                 )}

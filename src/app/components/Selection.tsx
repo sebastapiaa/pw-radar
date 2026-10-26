@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { startOutreach, enrichOutreachBatch, finishOutreach, outreachMembers } from "@/lib/actions";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { startOutreach } from "@/lib/actions";
+import { processContactList } from "./ListProgress";
 
 /**
  * Outreach list: tick companies on the findings list, see the count and the
@@ -85,26 +86,22 @@ export function SelectBox({ id, disabled }: { id: string; disabled?: boolean }) 
       onChange={() => toggle(id)}
       onClick={(e) => e.stopPropagation()}
       aria-label="Add to outreach list"
-      title={disabled ? "Manual accounts cannot be enriched" : "Add to outreach list"}
+      title={disabled ? "Requires a ZoomInfo account, gate clearance and corroborating signals" : "Add to contact list"}
     />
   );
 }
 
 /**
- * Bulk selection controls above the list. `all` and `unflagged` are the
- * selectable company ids in list (score) order; manual accounts are excluded
- * by the page before they get here.
+ * Eligible company IDs in score order. The page removes accounts that cannot
+ * be enriched; the server repeats the eligibility check during processing.
  */
-export function SelectionControls({ all, unflagged }: { all: string[]; unflagged: string[] }) {
+export function SelectionControls({ all }: { all: string[] }) {
   const { selected, selectMany, clear } = useSelection();
   const OUTREACH_MAX_COMPANIES = useContext(LimitContext);
   return (
     <div className="selection-controls">
       <button type="button" className="button small ghost" onClick={() => selectMany(all)}>
-        Select all ({all.length})
-      </button>
-      <button type="button" className="button small ghost" onClick={() => selectMany(unflagged)}>
-        Select all unflagged ({unflagged.length})
+        Select all eligible ({all.length})
       </button>
       {selected.size > 0 && (
         <button type="button" className="link muted small" onClick={clear}>
@@ -118,52 +115,44 @@ export function SelectionControls({ all, unflagged }: { all: string[]; unflagged
 
 type Phase =
   | { kind: "idle" }
+  | { kind: "starting" }
   | { kind: "running"; runId: string; total: number; done: number; credits: number; withEmail: number; errors: string[] }
   | { kind: "finished"; runId: string; withEmail: number; credits: number; errors: string[]; exportName: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; runId?: string };
 
 export function SelectionBar() {
   const { selected, clear } = useSelection();
   const OUTREACH_MAX_COMPANIES = useContext(LimitContext);
   const [perCompany, setPerCompany] = useState(5);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const busy = useRef(false);
   const count = selected.size;
   if (count === 0 && phase.kind === "idle") return null;
 
   const run = async () => {
-    const ids = [...selected];
-    const start = await startOutreach(ids, perCompany);
-    if (!start.ok || !start.runId) {
-      setPhase({ kind: "error", message: start.message });
-      return;
-    }
-    const runId = start.runId;
-    const total = start.companies ?? ids.length;
-    // The server may have capped the run to the top N by score; only those are members.
-    const members = await outreachMembers(runId);
-    const toRun = members.length ? members : ids;
-    let done = 0;
-    let credits = 0;
-    let withEmail = 0;
-    const errors: string[] = [];
-    setPhase({ kind: "running", runId, total, done, credits, withEmail, errors });
-    for (let i = 0; i < toRun.length; i += 3) {
-      const step = await enrichOutreachBatch(runId, toRun.slice(i, i + 3), perCompany);
-      if (!step.ok) {
-        errors.push(step.message ?? "batch failed");
-        break;
+    if (busy.current) return;
+    busy.current = true;
+    setPhase({ kind: 'starting' });
+    let runId: string | undefined;
+    try {
+      const start = await startOutreach([...selected], perCompany);
+      if (!start.ok || !start.runId) {
+        setPhase({ kind: 'error', message: start.message });
+        return;
       }
-      for (const d of step.done) {
-        done++;
-        withEmail += d.withEmail;
-        if (d.error) errors.push(`${d.companyId}: ${d.error}`);
-      }
-      credits = step.creditsSoFar;
-      setPhase({ kind: "running", runId, total, done, credits, withEmail, errors: [...errors] });
+      runId = start.runId;
+      const id = runId;
+      const fin = await processContactList(id, (done, total, credits) =>
+        setPhase({ kind: 'running', runId: id, total, done, credits, withEmail: 0, errors: [] }));
+      setPhase({ kind: 'finished', runId: id, withEmail: fin.withEmail, credits: fin.credits, errors: fin.errors, exportName: fin.exportName });
+      clear();
+    } catch {
+      setPhase({ kind: 'error', runId, message: runId
+        ? 'Processing stopped. Your contact list is saved; open it to review and continue.'
+        : 'The contact list could not be created. Check the service configuration and try again.' });
+    } finally {
+      busy.current = false;
     }
-    const fin = await finishOutreach(runId);
-    setPhase({ kind: "finished", runId, withEmail: fin.withEmail, credits: fin.credits, errors, exportName: fin.exportName });
-    clear();
   };
 
   return (
@@ -188,23 +177,25 @@ export function SelectionBar() {
             </select>
           </label>
           <button type="button" className="button small" onClick={run}>
-            Get contacts & build export
+            Build contact list
           </button>
           <button type="button" className="link muted small" onClick={clear}>
             Clear
           </button>
         </>
       )}
+      {phase.kind === 'starting' && <span>Saving your contact list…</span>}
       {phase.kind === "running" && (
         <span>
-          Getting contacts… <b>{phase.done}</b> of {phase.total} companies · {phase.withEmail} emails · {phase.credits} credits
+          Getting contacts… <b>{phase.done}</b> of {phase.total} companies · up to {phase.credits} credits
+          {' '}<a href={`/weekly?run=${phase.runId}`} className="link small">Open saved list</a>
           {phase.errors.length > 0 && <span className="error"> · {phase.errors.length} errors</span>}
         </span>
       )}
       {phase.kind === "finished" && (
         <>
           <span>
-            Done: <b>{phase.withEmail}</b> contacts with email · {phase.credits} credits
+            Saved: <b>{phase.withEmail}</b> contacts with email · up to {phase.credits} credits
             {phase.errors.length > 0 && <span className="error"> · {phase.errors.length} companies failed</span>}
           </span>
           <form method="get" action="/api/export" className="export-form compact">
@@ -228,6 +219,7 @@ export function SelectionBar() {
       {phase.kind === "error" && (
         <>
           <span className="error">{phase.message}</span>
+          {phase.runId && <a href={`/weekly?run=${phase.runId}`} className="button small">Open saved list</a>}
           <button type="button" className="link muted small" onClick={() => setPhase({ kind: "idle" })}>
             Back
           </button>

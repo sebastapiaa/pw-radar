@@ -215,3 +215,55 @@ create table account_profiles (
   model           text not null,
   generated_at    timestamptz not null default now()
 );
+
+-- Snapshot of migrations 003, 004 and 007. Fresh installs mark all migrations
+-- applied, so these objects must exist here as well as in incremental upgrades.
+create index signals_company_signal_date_idx on signals (zi_company_id, signal_date desc);
+create index findings_created_company_idx on findings (created_at desc, zi_company_id);
+
+create table gate_decisions (
+  id bigserial primary key,
+  run_id uuid not null,
+  zi_company_id text not null references companies(zi_company_id),
+  check_name text not null,
+  verdict text not null check (verdict in ('pass','flag','kill','skipped')),
+  reason text,
+  evidence jsonb,
+  created_at timestamptz not null default now()
+);
+create index on gate_decisions (run_id, check_name);
+create index on gate_decisions (zi_company_id, created_at desc);
+alter table companies
+  add column parent_company_id text,
+  add column location_type text,
+  add column industry_ids text[] not null default '{}',
+  add column employment_trend text,
+  add column gate_status text not null default 'pending'
+    check (gate_status in ('pending','passed','flagged','killed','approved')),
+  add column gate_reason text,
+  add column gate_reviewed_by text,
+  add column gate_reviewed_at timestamptz;
+create index on companies (gate_status);
+alter table outcomes add column reason text check (reason is null or reason in
+  ('dead_company','wrong_entity','competitor','bad_fit','already_covered','other'));
+
+alter table runs
+  add column actor text,
+  add column contacts_per_company integer check (contacts_per_company between 1 and 5),
+  add column contact_list_version integer not null default 0;
+alter table weekly_shortlist
+  add column contact_status text not null default 'legacy'
+    check (contact_status in ('legacy','pending','processing','complete','failed','uncertain','skipped')),
+  add column contact_error text,
+  add column processing_started_at timestamptz,
+  add column paid_started_at timestamptz;
+create table shortlist_contacts (
+  run_id uuid not null,
+  zi_company_id text not null,
+  zi_contact_id text not null references contacts(zi_contact_id),
+  rank integer not null,
+  primary key (run_id, zi_contact_id),
+  foreign key (run_id, zi_company_id)
+    references weekly_shortlist(run_id, zi_company_id) on delete cascade
+);
+create index on shortlist_contacts (run_id, zi_company_id, rank);

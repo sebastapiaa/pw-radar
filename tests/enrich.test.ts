@@ -38,6 +38,22 @@ test("tier classification matches ZoomInfo's live brief vocabulary", () => {
   assert.equal(classifyTier({ title: "Quality", managementLevel: "Director", department: "Engineering & Technical", jobFunction: "" }), "other");
 });
 
+test('committee excludes junior security roles, physical security and unrelated executives', () => {
+  const tier = (title: string, managementLevel = '') => classifyTier({ title, managementLevel, department: '', jobFunction: '' });
+  for (const title of ['Security Analyst','Security Engineer','Physical Security Director','Vice President of Sales','Chief Marketing Officer']) {
+    assert.equal(tier(title), 'other', title);
+  }
+  assert.equal(tier('Chief Information Security Officer'), 'security');
+  assert.equal(tier('VP of Infrastructure'), 'it');
+  assert.equal(tier('Chief Financial Officer'), 'csuite');
+  assert.equal(tier('President'), 'csuite');
+});
+
+test('duplicate recommendations never consume two committee slots', () => {
+  const picked = selectCommittee([rec({ contactId: '1', tier: 'it' }), rec({ contactId: '1', tier: 'it' }), rec({ contactId: '2', tier: 'csuite' })], 5);
+  assert.deepEqual(picked.map((p) => p.contactId).sort(), ['1','2']);
+});
+
 test("committee selection covers tiers and never fills with 'other'", () => {
   const recs: Recommendation[] = [
     rec({ contactId: "a", rank: 1, tier: "other", reRankingScore: 0.9 }),

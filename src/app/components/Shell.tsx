@@ -15,7 +15,7 @@ export default async function Shell({ children }: { children: ReactNode }) {
         <nav className="nav">
           <Link href="/">Home</Link>
           <Link href="/findings">Findings</Link>
-          <Link href="/weekly">Weekly</Link>
+          <Link href="/weekly">Contact lists</Link>
           <Link href="/gate">Gate</Link>
           <Link href="/scopes">Scopes</Link>
           <Link href="/accounts/new">Add account</Link>

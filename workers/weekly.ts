@@ -31,6 +31,8 @@ import { notifyWeekly } from "../src/lib/notify";
 import { selectCommittee, storeRecommendations, storeEnrichment } from "../src/lib/enrich";
 import { generateProfile, type ProfileSignal } from "../src/lib/profile";
 import { runGate, summarize, type Candidate } from "../src/lib/gate";
+import { chargeCredits, committeeEmailCount, contactsNeedingEnrichment, saveCommittee } from "../src/lib/contact-lists";
+import { assertPIIKey } from "../src/lib/crypto";
 
 /** Tune against real output. Higher means more credits, not more insight. */
 const SHORTLIST_SIZE = Number(process.env.SHORTLIST_SIZE ?? 15);
@@ -54,9 +56,11 @@ async function main() {
 
   const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
   const gateOnly = process.argv.includes("--gate-only");
+  if (!gateOnly) assertPIIKey();
 
   const [{ run_id: runId }] = await sql<{ run_id: string }[]>`
-    insert into runs (job) values (${gateOnly ? "weekly-gate" : "weekly"}) returning run_id`;
+    insert into runs (job, actor, contacts_per_company, contact_list_version)
+    values (${gateOnly ? "weekly-gate" : "weekly"}, 'weekly-worker', ${CONTACTS_PER_COMPANY}, 1) returning run_id`;
 
   const stats = {
     candidates: 0, gatePassed: 0, gateFlagged: 0, gateKilled: 0, uncorroborated: 0,
@@ -145,32 +149,41 @@ async function main() {
     );
     for (const [i, company] of shortlist.entries()) {
       await sql`
-        insert into weekly_shortlist (run_id, zi_company_id, rank, score, why_now)
-        values (${runId}, ${company.zi_company_id}, ${i + 1}, ${company.score}, ${whyNowBy.get(company.zi_company_id) ?? null})`;
+        insert into weekly_shortlist (run_id, zi_company_id, rank, score, why_now, contact_status)
+        values (${runId}, ${company.zi_company_id}, ${i + 1}, ${company.score}, ${whyNowBy.get(company.zi_company_id) ?? null}, 'pending')`;
     }
 
     for (const company of shortlist) {
+      await sql`update weekly_shortlist set contact_status = 'processing', processing_started_at = now()
+        where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
       // 1. Free recommendations stored for everyone (titles, tiers; names arrive
       //    with enrichment since Oct 2026), then the buying committee selected.
       const { recs } = await storeRecommendations(client, company.zi_company_id);
       const picked = selectCommittee(recs, CONTACTS_PER_COMPANY);
       stats.contactsPicked += picked.length;
-      await sql`update weekly_shortlist set contacts_picked = ${picked.length} where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
-      if (!picked.length) continue;
+      const ids = picked.map((p) => p.contactId);
+      await saveCommittee(sql, runId, company.zi_company_id, ids);
+      const needed = await contactsNeedingEnrichment(company.zi_company_id, ids);
 
       // 2. Ceiling check before spending. Upper bound: every record could be new.
-      if (stats.creditsSpent + picked.length > CREDIT_CEILING) {
+      if (stats.creditsSpent + needed.length > CREDIT_CEILING) {
         throw new CreditError(
-          `Credit ceiling ${CREDIT_CEILING} would be exceeded (spent ${stats.creditsSpent}, next batch ${picked.length}). Aborting.`
+          `Credit ceiling ${CREDIT_CEILING} would be exceeded (spent ${stats.creditsSpent}, next batch ${needed.length}). Aborting.`
         );
       }
 
       // 3. Paid enrichment, encrypted on insert inside storeEnrichment().
-      const r = await storeEnrichment(client, company.zi_company_id, picked.map((p) => p.contactId));
-      stats.creditsSpent += r.records;
-      stats.contactsEnriched += r.records;
-      await sql`update runs set credits_spent = ${stats.creditsSpent} where run_id = ${runId}`;
-      await sql`update weekly_shortlist set contacts_enriched = ${r.withEmail} where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
+      if (needed.length) {
+        await chargeCredits(runId, needed.length);
+        stats.creditsSpent += needed.length;
+        await sql`update weekly_shortlist set paid_started_at = now() where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
+        const r = await storeEnrichment(client, company.zi_company_id, needed);
+        stats.contactsEnriched += r.records;
+        if (r.records < needed.length) throw new Error('Enrichment returned an incomplete committee. Review the saved list.');
+      }
+      const withEmail = await committeeEmailCount(runId, company.zi_company_id);
+      await sql`update weekly_shortlist set contacts_enriched = ${withEmail}, contact_status = 'complete'
+        where run_id = ${runId} and zi_company_id = ${company.zi_company_id}`;
 
       // 4. Profile, company-level data only.
       if (anthropic) {
@@ -199,6 +212,9 @@ async function main() {
     }
     console.log(JSON.stringify({ job: "weekly", runId, ...stats }));
   } catch (err) {
+    await sql`update weekly_shortlist set contact_status = case when paid_started_at is null then 'failed' else 'uncertain' end,
+      contact_error = 'Processing stopped. Saved contacts remain available; paid work is not retried automatically.'
+      where run_id = ${runId} and contact_status = 'processing'`;
     await sql`
       update runs set finished_at = now(), status = 'failed', credits_spent = ${stats.creditsSpent},
         error = ${(err as Error).message}
